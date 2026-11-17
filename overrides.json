@@ -1,0 +1,9 @@
+{
+  "ships": [
+    {
+      "id": "135c",
+      "reason": "Motherlode's catalog gives the 135c a cargo grid without transform (no placement in the game files): the ship keeps its Fleetyards racks and holo-v1 hologram. Asked Sciirof for the transform (17 Nov 2026).",
+      "date": "2026-11-17"
+    }
+  ]
+}

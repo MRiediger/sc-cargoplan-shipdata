@@ -5,6 +5,7 @@ Stamps are never compared (condition C): `source` of a ship file and `generatedA
 on writing from the run's catalog and manifest, so a new catalog date alone changes nothing (S12.0 run 4: 99 files)."""
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -61,20 +62,26 @@ class ModelChanges:
     changed: list[str] = field(default_factory=list)
     new: list[str] = field(default_factory=list)
     without_url: list[str] = field(default_factory=list)
+    unused: list[str] = field(default_factory=list)
 
 
-def model_changes(holo_ships: dict[str, dict], catalog: dict) -> ModelChanges:
+CLASS_NAME = re.compile(r'^[A-Za-z0-9_]+$')
+
+
+def model_changes(holo_ships: dict[str, dict], catalog: dict, chosen: set[str]) -> ModelChanges:
     """The models the last release built its holograms from (holo.ships: slug -> {model, rawSha256}) against the catalog's
-    model URLs, whose file name carries the first 12 hex digits of the model's SHA-256. A className with a URL but no
-    hologram is new; one whose hologram has no URL any more keeps its hologram (A11)."""
-    built = {e['model']: e['rawSha256'][:12] for e in holo_ships.values() if e.get('rawSha256')}
+    model URLs, whose file name carries the first 12 hex digits of the model's SHA-256. `chosen` are the classNames that
+    show a slug now (holo_mesh.slug_models of the import's model map): one of them without hologram is new; a model with
+    a URL that shows no slug (a variant's own, a ship kept as it is) is unused. A hologram whose model has no URL any more
+    keeps its file (A11). Entries like 'fleetyards (holo-v1)' name a source, not a model, and are left out."""
+    built = {e['model']: e['rawSha256'][:12] for e in holo_ships.values() if CLASS_NAME.match(e.get('model') or '') and e.get('rawSha256')}
     urls = {s['className']: s['modelUrl'].rsplit('/', 1)[-1] for s in catalog['ships'] if s.get('className') and s.get('modelUrl')}
     out = ModelChanges()
     for cls in sorted(set(built) | set(urls)):
         if cls not in urls:
             out.without_url.append(cls)
         elif cls not in built:
-            out.new.append(cls)
+            (out.new if cls in chosen else out.unused).append(cls)
         elif urls[cls].endswith(f'-{built[cls]}.glb'):
             out.same.append(cls)
         else:

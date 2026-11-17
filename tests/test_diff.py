@@ -61,9 +61,13 @@ def test_racks_hash_ignores_everything_but_the_racks() -> None:
 def test_model_changes_are_counted_by_the_hash_in_the_model_url() -> None:
     holo = {'test-alpha': {'model': 'TEST_A', 'rawSha256': 'aaaaaaaaaaaa' + '0' * 52},
             'test-beta': {'model': 'TEST_B', 'rawSha256': 'bbbbbbbbbbbb' + '0' * 52},
-            'test-gone': {'model': 'TEST_G', 'rawSha256': 'cccccccccccc' + '0' * 52}}
+            'test-gone': {'model': 'TEST_G', 'rawSha256': 'cccccccccccc' + '0' * 52},
+            'test-old': {'model': 'fleetyards (holo-v1)'}}
     cat = {'ships': [{'className': 'TEST_A', 'modelUrl': 'https://x/TEST_A-aaaaaaaaaaaa.glb'},
                      {'className': 'TEST_B', 'modelUrl': 'https://x/TEST_B-dddddddddddd.glb'},
-                     {'className': 'TEST_N', 'modelUrl': 'https://x/TEST_N-eeeeeeeeeeee.glb'}]}
-    m = diff.model_changes(holo, cat)
-    assert (m.same, m.changed, m.new, m.without_url) == (['TEST_A'], ['TEST_B'], ['TEST_N'], ['TEST_G'])
+                     {'className': 'TEST_N', 'modelUrl': 'https://x/TEST_N-eeeeeeeeeeee.glb'},
+                     {'className': 'TEST_V', 'modelUrl': 'https://x/TEST_V-ffffffffffff.glb'}]}
+    # TEST_V is a variant's own model: its ship shows the base ship's hologram, so it builds nothing (as the Carrack
+    # Expedition on 16 Nov). 'fleetyards (holo-v1)' names a source, not a model.
+    m = diff.model_changes(holo, cat, chosen={'TEST_A', 'TEST_B', 'TEST_N'})
+    assert (m.same, m.changed, m.new, m.without_url, m.unused) == (['TEST_A'], ['TEST_B'], ['TEST_N'], ['TEST_G'], ['TEST_V'])
