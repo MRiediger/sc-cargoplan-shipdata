@@ -245,10 +245,11 @@ def follow_base(variant_text: str, base_text: str) -> str:
 
 
 def tool_versions() -> dict[str, str]:
-    import cv2
-    import numpy
+    """The versions that ran, as the pins name them: package versions (importlib.metadata), since cv2.__version__ says
+    5.0.0 for the pinned opencv-python-headless 5.0.0.93."""
+    from importlib.metadata import version
     run = lambda *a: subprocess.run(list(a), capture_output=True, text=True, check=True).stdout.strip()
-    return {'python': platform.python_version(), 'numpy': numpy.__version__, 'opencv': cv2.__version__,
+    return {'python': platform.python_version(), 'numpy': version('numpy'), 'opencv': version('opencv-python-headless'),
             'node': run('node', '-v').lstrip('v'),
             'meshoptimizer': json.loads((TOOLS / 'node_modules' / 'meshoptimizer' / 'package.json').read_text())['version'],
             'pwsh': run('pwsh', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()')}

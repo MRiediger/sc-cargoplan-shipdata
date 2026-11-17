@@ -1,7 +1,8 @@
 # Provenance of the pipeline's files
 
 Where the code in `tools/` comes from, byte for byte or changed, and how it was checked (T12.1). Replaces
-`spike/SOURCE.md`. SHA-256 of the files as committed (LF).
+`spike/SOURCE.md`. SHA-256 of the files as committed (LF). `spike/` and `spike.yml` were deleted at the end of T12.1;
+they are in the history up to `ec99392`.
 
 ## Taken byte for byte
 

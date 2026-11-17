@@ -11,6 +11,10 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=${SHIPDATA_TOOLS:-$HOME/s12tools}
 export PATH="$T/node/bin:$T/pwsh:$T/venv/bin:$PATH"
+# The repo under /mnt/c belongs to the WSL default user; run as another user (as root), git refuses it as "dubious
+# ownership" and verify cannot read pipelineCommit. Trusted for this script's processes only, no global config
+# (git-config(1), GIT_CONFIG_COUNT, git >= 2.31).
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$REPO"
 cmd=${1:-test}; shift || true
 
 setup() {

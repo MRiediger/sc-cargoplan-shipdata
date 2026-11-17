@@ -92,20 +92,23 @@ App: liest …/releases/latest/download/manifest.json, lädt ships/ + outlines.j
 sc-cargoplan-shipdata/
 ├── CLAUDE.md · TASKS.md · TOOLS.md · README.md · LICENSE · NOTICE.md · SECURITY.md
 ├── .github/workflows/
-│   ├── spike.yml                  # S12.0, wird nach T12.2 gelöscht
-│   └── ship-data.yml              # Monatslauf + Dispatch
+│   └── ship-data.yml              # Monatslauf + Dispatch (T12.2)
 ├── tools/
 │   ├── run.py                     # Einstieg: fetch · diff · build · verify · release
-│   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, holo_mesh, outline, compare
-│   ├── simplify.mjs               # meshoptimizer-Leiter
+│   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, chain, stages, importer, compare, log
+│   ├── holo_mesh.py · simplify.mjs                # Holo-Kette, byte-gleich zu holo-v3 (docs/provenance.md)
 │   ├── import-motherlode.ps1 · ShipJson.ps1   # Racks + Anker (aus dem App-Repo gezogen, T12.1)
-│   ├── requirements.txt · package.json · package-lock.json
+│   ├── gate/                      # Render-Gate-Skripte aus S12.0, für T12.2
+│   ├── local-wsl.sh               # WSL Ubuntu 24.04 mit den Pins: setup · test · run
+│   ├── requirements.txt · requirements-dev.txt · package.json · package-lock.json
 ├── overrides.json                 # Schiffe, die auf einem alten Stand bleiben (Grid ohne Transform)
+├── pytest.ini
 ├── state/last-run.json            # Lebenszeichen + Zusammenfassung des letzten Laufs
 ├── tests/                         # pytest: Regeln, Diff, Manifest, Vergleich; Fixtures klein und synthetisch
 └── docs/
     ├── decisions.md               # SD1…, nummeriert; App-Entscheidungen bleiben in sc-cargoplan/docs/decisions.md
     ├── plans/                     # ein Plan je Task, bleibt als Geschichte
+    ├── provenance.md              # Herkunft + SHA-256 der übernommenen Dateien
     └── manifest-format.md
 ```
 
@@ -114,12 +117,13 @@ Cache (`cache/`), Modelle (`*.glb`), Arbeitsordner, Bilder, PDFs und Kataloge si
 ## Befehle
 
 ```powershell
-python -I tools/run.py fetch --catalog-only      # Katalog per API (einmal), Status + SHA im Log
-python -I tools/run.py diff                      # Katalog gegen letztes Release: neu / geändert / verschwunden
-python -I tools/run.py build --ship <id>         # ein Schiff: Flatten → Leiter → Export → Umriss → Anker
-python -I tools/run.py verify                    # Regeln + Manifest + Hashes gegen den Arbeitsstand
-python -I tools/run.py release --dry-run         # Release-Inhalt zeigen, nichts hochladen
-pytest tests                                     # alle Tests
+python -I tools/run.py fetch [--saved <dir>] [--catalog-only]   # Katalog per API (einmal) oder aus gespeicherten Antworten; Modelle nach Hash
+python -I tools/run.py diff --previous <release-dir>            # gegen letztes Release: neu / geändert / verschwunden, Modelle separat
+python -I tools/run.py build [--ship <id>] [--all]              # Flatten → Cull → Leiter → Export → Umriss → Anker
+python -I tools/run.py verify                                   # Regeln + Manifest + Hashes; Exit 2 = PR-Pfad
+python -I tools/run.py release --dry-run                        # Release-Inhalt zeigen, nichts hochladen
+python -I tools/run.py release --seed --app <dir> --holo <dir>  # erstes Release aus App + Holo-Release (T12.6)
+pytest                                                          # alle Tests (lokal: tools/local-wsl.sh test)
 gh workflow run ship-data.yml -f dry-run=true    # Dispatch ohne Release (nur zum Lesen des Logs, Martin klickt)
 gh run view --log                                # Log des letzten Laufs
 ```
