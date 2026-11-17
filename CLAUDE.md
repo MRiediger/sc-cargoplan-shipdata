@@ -54,7 +54,7 @@ App: liest …/releases/latest/download/manifest.json, lädt ships/ + outlines.j
 
 | Fall | Regel |
 |---|---|
-| Judge-Fail (z. B. Hausdorff) | kein Auto-Release → PR mit Metriken und Bild |
+| Judge-Fail (z. B. Hausdorff) | nur bei Verschlechterung: neu gebautes Holo `passed=false` und im letzten Release `passed=true`, neu oder mit neuem Modell → kein Auto-Release, PR mit Metriken und Bild; > 110 % Budget immer. Mit `passed=false` veröffentlichte Schiffe (holo-v3: 22, Kontaktabzug) feuern bei gleichem Modell nicht (T12.1, P9) |
 | Schiff aus dem Katalog verschwunden | behalten, letzte Daten + Holo bleiben, `missingSince` im Manifest; nach 3 Läufen Backlog-Zeile |
 | Grid ohne Transform | Schiff bleibt auf seinem Stand – Eintrag in `overrides.json`, Hinweis |
 | überlappende Grids | nicht schreiben → PR |

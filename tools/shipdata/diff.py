@@ -1,0 +1,82 @@
+"""diff: what changed against the last release - ship files (racks), new and gone ships, and the models (counted apart: a
+re-export comes without a build change, S12.0 finding 1).
+
+Stamps are never compared (condition C): `source` of a ship file and `generatedAt` / `dataVersion` of outlines.json are set
+on writing from the run's catalog and manifest, so a new catalog date alone changes nothing (S12.0 run 4: 99 files)."""
+import hashlib
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+STAMPS = ('source', 'generatedAt', 'dataVersion')
+
+
+def strip_stamps(doc: dict) -> dict:
+    return {k: v for k, v in doc.items() if k not in STAMPS}
+
+
+def content_hash(doc: dict) -> str:
+    """SHA-256 of a document without its stamps, keys sorted: equal content gives equal hashes whatever the formatting."""
+    return hashlib.sha256(json.dumps(strip_stamps(doc), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def racks_hash(ship: dict) -> str:
+    """SHA-256 of the racks alone: a variant and its base ship with the same racks have the same hash (rule "variant")."""
+    return hashlib.sha256(json.dumps(ship.get('racks', []), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def load(path: Path) -> dict:
+    return json.loads(path.read_text(encoding='utf-8-sig'))
+
+
+@dataclass
+class ShipChanges:
+    changed: list[str] = field(default_factory=list)
+    new: list[str] = field(default_factory=list)
+    gone: list[str] = field(default_factory=list)
+    same: list[str] = field(default_factory=list)
+
+
+def compare_ships(old_dir: Path, new_dir: Path, absent: list[str]) -> ShipChanges:
+    """Ship files of the last release against the ones the import wrote. `absent` are the ids the import found in the
+    folder but not in the catalog (gone)."""
+    out = ShipChanges(gone=sorted(absent))
+    for path in sorted(new_dir.glob('*.json')):
+        sid = path.stem
+        if sid in absent:
+            continue
+        old = old_dir / path.name
+        if not old.exists():
+            out.new.append(sid)
+        elif content_hash(load(old)) != content_hash(load(path)):
+            out.changed.append(sid)
+        else:
+            out.same.append(sid)
+    return out
+
+
+@dataclass
+class ModelChanges:
+    same: list[str] = field(default_factory=list)
+    changed: list[str] = field(default_factory=list)
+    new: list[str] = field(default_factory=list)
+    without_url: list[str] = field(default_factory=list)
+
+
+def model_changes(holo_ships: dict[str, dict], catalog: dict) -> ModelChanges:
+    """The models the last release built its holograms from (holo.ships: slug -> {model, rawSha256}) against the catalog's
+    model URLs, whose file name carries the first 12 hex digits of the model's SHA-256. A className with a URL but no
+    hologram is new; one whose hologram has no URL any more keeps its hologram (A11)."""
+    built = {e['model']: e['rawSha256'][:12] for e in holo_ships.values() if e.get('rawSha256')}
+    urls = {s['className']: s['modelUrl'].rsplit('/', 1)[-1] for s in catalog['ships'] if s.get('className') and s.get('modelUrl')}
+    out = ModelChanges()
+    for cls in sorted(set(built) | set(urls)):
+        if cls not in urls:
+            out.without_url.append(cls)
+        elif cls not in built:
+            out.new.append(cls)
+        elif urls[cls].endswith(f'-{built[cls]}.glb'):
+            out.same.append(cls)
+        else:
+            out.changed.append(cls)
+    return out

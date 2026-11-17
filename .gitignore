@@ -22,3 +22,6 @@ out/
 *.holo
 *.png
 *.pdf
+
+# Test runs
+.pytest_cache/
