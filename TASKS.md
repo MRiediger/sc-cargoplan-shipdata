@@ -74,13 +74,28 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 1. **Gate:** hash-exakt, beide Stände im selben Job, keine gespeicherte Baseline, kein Toleranzmodus. Das Phasen-Gate „Umrisse und Holos per Bildvergleich mit Schwelle“ wird **„byte-gleich“** – Ubuntu erzeugt Holo und Umriss bitgleich zu Windows. T12.1-Akzeptanz „unter der S12.0-Schwelle“ → „byte-gleich zu holo-v3“.
 2. **Runner-Pin:** `ubuntu-24.04` statt `ubuntu-latest`, oder Python-Pin auf ≥ 3.14.6 (dann neu gegen holo-v3 messen). Entscheidung in T12.0; `CLAUDE.md` nennt heute `ubuntu-latest`.
 3. **Änderungserkennung nach Modell-SHA, nicht nach Build:** Motherlode exportiert ohne Build-Wechsel neu, und das Holo ändert sich dann wirklich. Ein Re-Export aller Modelle heißt ≈ 65–70 min Kette → T12.2 plant Laufzeit (ggf. Matrix). Der Judge braucht eine Regel für kleine Änderungen (Pixelanteil 10⁻⁴ … 10⁻³): Release oder PR.
-4. **Import-Datum:** beim Umzug nach T12.1 `updatedAt` als String übernehmen (`-DateKind String` unter pwsh 7, oder Python). Bis dahin erzeugt jeder Linux-Import 99+ Scheinänderungen.
-5. **Erster echter Lauf trifft sofort die Regeln** „verschwunden“ (8 Schiffe) und „neues Schiff“ (`hyun`) sowie eine Rack-Änderung (F7C). Frage an Sciirof: Sind die Varianten absichtlich entfernt?
+4. **Import-Datum – in S12.0 behoben (Nachtrag 1).** Der Fix wandert mit dem Import nach T12.1.
+5. **Erster echter Lauf trifft sofort die Regeln** „verschwunden“ und „neues Schiff“ (`hyun`) sowie eine Rack-Änderung (F7C). Die Verschwundenen sind Varianten (Nachtrag 3): Die Regel braucht den Fall „Variante ohne eigenen Katalogeintrag“. Frage an Sciirof: Sind die Varianten absichtlich zusammengelegt?
 6. **Anker-Umzug machbar:** `import-motherlode.ps1` läuft unter pwsh auf Linux unverändert bis aufs Datum; `decimate.ps1`/`run-all.ps1` entfallen.
 7. **E1:** `actions/cache` ist für Fork-PR-Workflows lesbar → den Katalog in T12.2 nicht cachen, oder Fork-Workflows abschalten.
 8. **E3:** Der Tausch im Checkout funktioniert (3,4 s inkl. Rebuild), hängt aber an `CopyToOutputDirectory` → Env-Override in `ShipPictureTests` (T12.5) bleibt vorzuziehen.
 9. **Gate-Laufzeit ≈ 10 min** pro Job mit zwei Bildläufen; `setup-python` auf Windows (46 s) in T12.2 weglassen.
 10. **Lokaler Test vor dem Runner:** `spike/local-wsl.sh` fand die Datumsabweichung vor dem Runner-Lauf. Muster für T12.1: `run.py` erst in WSL Ubuntu 24.04, dann im Workflow.
+11. **„Verschwunden“ heißt nie löschen; Stopp-Schwelle.** Regel in T12.1: Ein verschwundenes Schiff bleibt mit seinem letzten Stand und `missingSince`. Eine Variante, deren Basis-`className` noch im Katalog steht, bekommt die Daten der Basis. Bei mehr als **3** neu verschwundenen Schiffen ohne Basis hält der Lauf an und geht in den PR-Pfad. Ein Wert, der am 17.11. nicht gefeuert hätte (0 ohne Basis), einen Massenabgang aber stoppt; die Zahl ist zu bestätigen.
+
+**Nachtrag Review (17.11.2026):**
+1. **`source`-Datum – behoben, gemessen.** Der vorgeschlagene Fix `ToString("o")` reicht nicht: Er schreibt 7 Nachkommastellen (`2026-11-12T20:50:33.0360000Z`), die API und die Dateien von v0.5.1 haben 3 (`…33.036Z`).
+
+   | Variante | pwsh 7.6.10 | Windows PowerShell 5.1 |
+   |---|---|---|
+   | wie bisher | 104 / 108 anders | 0 / 108 |
+   | `ToString("o")` | 104 / 108 | 0 / 108 |
+   | `ConvertFrom-Json -DateKind String` | **0 / 108** | **0 / 108** |
+
+   Der Import liest `updatedAt` als String, wenn `ConvertFrom-Json` den Parameter kennt (pwsh ≥ 7.5); 5.1 lässt Strings ohnehin unverändert. `spike/chain-job.sh` patcht die ausgecheckte Kopie. Lokal in WSL (Archiv 16.11.): `100i.json` **byte-gleich**, Import schreibt **0** Dateien um – die ganze Ubuntu-Kette (Holo, Umriss, Schiffs-JSON) ist damit byte-gleich zu v0.5.1/holo-v3.
+2. **Gewollte Render-Änderungen brauchen keinen Freigabepfad im Daten-Gate.** Das Gate rendert alten und neuen Datenstand mit **derselben** gepinnten App-Version (K1). Ändert sich der Renderer (neuer App-Tag im Pin), rendern beide Seiten mit dem neuen Renderer und bleiben gleich, solange die Daten gleich sind. Der Pin-Bump ist ein gewöhnlicher Commit. Renderer-Regressionen prüft das App-Repo mit seinem eigenen `ShipPictureTests`-Ablauf (D90). Was hier rot wird, sind gewollte **Daten**-Änderungen an vielen Schiffen (z. B. neue Holo-Parameter): Das ist der vorhandene PR-Pfad („Regel feuert → PR, Martins Merge = Freigabe“) mit dem Diff-Bericht als PR-Text. Ein Input `render-change=true` wäre ein Schalter, der das Gate umgeht, und wird nicht gebaut.
+3. **Verschwunden: 6 neu, alle Varianten.** Gegenüber dem Archiv vom 16.11. fehlen am 17.11. MOLE Carbon/Talus (`ARGO_MOLE`), Carrack w/C8X und Carrack Expedition w/C8X (`ANVL_Carrack`, `ANVL_Carrack_Expedition`), Mustang Alpha Vindicator (`CNOU_Mustang_Alpha`) und Valkyrie Liberator Edition (`ANVL_Valkyrie`). Jede teilt ihre `className` mit dem Basisschiff, das noch im Katalog steht. Cyclone und 600i Executive fehlten schon am 16.11.; der F7C Hornet Mk II ist zurück. Keine Umbenennung erkennbar; `hyun` (32 SCU) lässt sich ohne den Katalog vom 17.11. (nur im Actions-Cache) keiner `className` zuordnen → im ersten T12.1-Lauf prüfen. Regel siehe Punkt 11 oben.
+4. **`CLAUDE.md` korrigiert:** `ubuntu-24.04` für die Kette, `schemaVersion` 6.
 
 ### [ ] T12.0 Doku
 

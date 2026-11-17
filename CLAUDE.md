@@ -66,7 +66,7 @@ App: liest …/releases/latest/download/manifest.json, lädt ships/ + outlines.j
 ## Domänenfakten
 
 - **Quelle:** Motherlode (Sciirof, cryon.rocks). Katalog per API mit Key; Modell-URLs stehen nicht in der API, sondern auf der Seite `cryon.rocks/ops/cargo` (RSC-Stream, ohne Key); Modelle liegen in einem öffentlichen Supabase-Bucket. Bis Sciirof einen Modell-Endpunkt liefert, bleibt der Seiten-Scraper – mit klarem Fehler und PR, sobald die Seite sich ändert. **Die API einmal pro Lauf rufen, nie in Schleife.** Sciirofs Freigabe für den Monatslauf steht aus.
-- **Schiffs-JSON:** Format in `sc-cargoplan/docs/ship-format.md`, `schemaVersion` aktuell 4 (Racks mit `origin`, `grid`, `stackAxis`, optional `rotation`; `modelKey`, `holoOrigin`). Koordinaten x Bug+, y Backbord+, z oben+, 1 Zelle = 1 SCU = 1,25 m. **Schema-Bump nur zusammen mit einem App-Release.**
+- **Schiffs-JSON:** Format in `sc-cargoplan/docs/ship-format.md`, `schemaVersion` aktuell 6 (`ShipLoader.SupportedSchemaVersion`; 4 und 5 liest die App noch) (Racks mit `origin`, `grid`, `stackAxis`, optional `rotation`; `modelKey`, `holoOrigin`, `outlineOrigin`). Koordinaten x Bug+, y Backbord+, z oben+, 1 Zelle = 1 SCU = 1,25 m. **Schema-Bump nur zusammen mit einem App-Release.**
 - **Umriss:** `outlines.json`, Meter, Ursprung unabhängig vom Rack-Nullpunkt, Zuordnung per `modelKey` (App-D90, D94).
 - **Holo:** Format SCH2 (`sc-cargoplan/docs/holo-format.md`), aus dem Motherlode-Modell: Flatten → Cull → Leiter 20k/30k/40k (meshoptimizer) → Export. CIG-Material: nie im Repo, nur Cache und Release-Asset, mit NOTICE; `holo: null` im Manifest ist der Kill-Switch.
 - **Anker:** heute in `sc-cargoplan/tools/import-motherlode.ps1`; zieht nach T12.1 hierher.
@@ -77,7 +77,7 @@ App: liest …/releases/latest/download/manifest.json, lädt ships/ + outlines.j
 
 | Was | Entscheidung | Warum |
 |---|---|---|
-| Laufumgebung | **GitHub Actions**, `ubuntu-latest` für die Kette, `windows-latest` nur fürs Render-Gate | Kein eigener Server; Windows nur, wo WPF rendert. |
+| Laufumgebung | **GitHub Actions**, `ubuntu-24.04` für die Kette (gepinnt: Python 3.14.5 gibt es für 26.04 = `ubuntu-latest` nicht, S12.0), `windows-latest` nur fürs Render-Gate | Kein eigener Server; Windows nur, wo WPF rendert. Kein Pin fürs Gate nötig: beide Stände entstehen im selben Job (S12.0 K1). |
 | Kette | **Python** (numpy, opencv-python-headless) + **Node** (meshoptimizer WASM) + **pwsh** für Anker/Import, ein Einstieg `run.py` mit Unterbefehlen `fetch · diff · build · verify · release` | Bestehender, bewährter Code aus `sc-ship-outlines`; kein Blender, keine GPU, kein Display. |
 | Pins | alles in `TOOLS.md`, Versionen exakt; `setup-python`/`setup-node` lesen daraus | Lokal = CI nur mit denselben Versionen; Abweichung ist ein Befund. |
 | Gate | **beide Stände im selben Job rendern**, Hash-exakt (`ShipPictureTests`), Schwelle nur für den Judge | Runner- und Plattform-Drift fallen per Konstruktion weg (S12.0 K1). |

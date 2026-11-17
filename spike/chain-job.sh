@@ -87,6 +87,13 @@ prev="$ROOT/app/outlines/ship-outlines.json"
 read -r gen dv < <($PY -c "import json, sys; d = json.load(open(sys.argv[1])); print(d['generatedAt'], d['dataVersion'])" "$prev")
 keep=$($PY -c "import json, sys; print(' '.join(s['slug'] for s in json.load(open(sys.argv[1]))['ships'] if s['slug'] != sys.argv[2]))" "$prev" "$SLUG")
 if [ -n "$CAT" ]; then
+    # Date fix (review of the S12.0 findings): pwsh 7 reads updatedAt as a DateTime and writes it into "source" in the
+    # culture's format. -DateKind String (pwsh >= 7.5) keeps the API's string; Windows PowerShell 5.1 has no such
+    # parameter and keeps strings anyway. Measured on the 16 Nov archive: 0 of 108 ship files differ on pwsh 7.6.10 and
+    # on 5.1 (without the fix 104 on pwsh 7; with ToString("o") still 104: seven fraction digits instead of three).
+    # Patched into the checked-out copy only; the import moves into this repo with T12.1.
+    sed -i 's/^\(\s*\)\$parsed = Get-Content -LiteralPath \$Path -Raw -Encoding UTF8 | ConvertFrom-Json$/\1$cf = @{}; if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey("DateKind")) { $cf.DateKind = "String" }\n\1$parsed = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json @cf/' app/tools/import-motherlode.ps1
+    grep -q 'ConvertFrom-Json @cf' app/tools/import-motherlode.ps1 || { echo "date fix did not apply"; failed+=(date-fix); }
     rm -rf work/ships; cp -r app/ships work/ships
     rc1=0; t=$(now)
     pwsh -NoProfile -File app/tools/import-motherlode.ps1 -Catalog "$CAT" -ShipsFolder "$ROOT/work/ships" -Outlines "$prev" \
