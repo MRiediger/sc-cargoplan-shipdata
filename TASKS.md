@@ -36,6 +36,52 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 
 **Akzeptanz:** Dispatch-Lauf mit allen drei Jobs (grün oder rot mit erklärtem Befund), `compare.py` lokal gelaufen, Abschnitt „S12.0 Befund“ hier mit allen fünf Antworten **als Zahlen** (Sekunden je Stufe, Versionen vs. Pins, Bytes, Hash-Gleichheit n/N, Schwelle mit Lücke, Manifest-Felder gebraucht/überflüssig) und Liste „Das ändert sich am Phasenplan“. Ein zweiter Dispatch zeigt den Cache-Treffer und ruft die API nicht erneut. Martin kann erklären, warum beide Stände im selben Job gerendert werden.
 
+**S12.0 Befund (17.11.2026):** drei Dispatch-Läufe; Lauf 3 [44090875270](https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44090875270) grün (chain 2:38 min, gate-a 8:07, gate-b 9:42). Lauf 1 rot: `ubuntu-latest` ist 26.04, dort gibt es Python 3.14.5 nicht (erst ab 3.14.6). Lauf 2 rot: die Modelle aller Kandidaten waren neu exportiert, der Probe-Code brach ab statt zu messen. Danach Kette als ein Skript (`spike/chain-job.sh`), vor Lauf 3 lokal in WSL Ubuntu 24.04 mit denselben Pins getestet (`spike/local-wsl.sh`). API-Rufe über alle drei Läufe: **1** (Lauf 2); Lauf 3 kam aus dem Cache („0 API, 0 page GET, 101 HEAD, 2 model GET“).
+
+1. **Kette auf Ubuntu – läuft, byte-gleich zu holo-v3.**
+   - Runner `ubuntu-24.04` (Image ubuntu24 20261111.370.1), nicht `ubuntu-latest` (s. o.).
+   - Versionen = Pins: Python 3.14.5, numpy 2.5.3, opencv-python-headless 5.0.0.93, Node 24.16.0, meshoptimizer 1.3.0; pwsh 7.6.10 vom Image.
+   - Setup: setup-python 10 s, setup-node 5 s, pip 5,0 s, npm 0,5 s.
+   - 100i (altes Modell `da8168ea3720`), Sekunden je Stufe: Flatten 0,2 · Cull 22,7 · Ref 0,1 · Leiter (1 Stufe, 20 k) 0,1 · Export 3,4 · Umriss 0,2 = **26,7 s**; `fetch-motherlode.ps1` offline 3,9 s; Import 2,8 + 2,4 s; `outlines-v2` 0,2 s. Hochrechnung alle 101 Modelle: lokal (Windows) 59 Schiffe in 2 353 s, Ø 40 s, max 79 s (Ironclad Assault) → **≈ 65–70 min** in einem Job; Cull dominiert.
+   - `orig-100i.holo` **byte-gleich** (93 794 B, `f05c9c4f…`), PP-Metriken gleich dem Manifest, `ship-outlines.json` **byte-gleich**. Zusätzlich lokal: `chain.sh` unter Windows (DRAK Cutter) byte-gleich zu `holo-work-ml` – die Bash-Kette ersetzt `decimate.ps1`/`run-all.ps1` ohne Abweichung.
+   - Schiffs-JSON **nicht byte-gleich, nur in `source`**: pwsh 7 macht beim `ConvertFrom-Json` aus `updatedAt` ein DateTime → `11/12/2026 20:50:33` statt `2026-11-12T20:50:33.036Z`. Lokal (Archiv 16.11.): 104 Dateien umgeschrieben, 0 über `source` hinaus. Runner (Katalog 17.11.): 99 umgeschrieben, 98 nur `source`, 1 echte Datenänderung (`f7c_hornet_mk_ii`, Rack 1 Zelle verschoben). `ConvertFrom-Json -DateKind String` behebt es in pwsh 7.6.10 (geprüft), existiert aber nicht in Windows PowerShell 5.1.
+   - Cache: Katalog-Rohdaten 180 KB (API 72,5 KB + Seite 106,6 KB), Katalog 217,5 KB; alle 101 Modelle **52,0 MB** (größtes 1,52 MB); Arbeitsordner 100i 0,72 MB, lokal `holo-work-ml` 101 Schiffe 370 MB.
+   - **Re-Export ohne Build-Wechsel:** Katalog 17.11. (`updatedAt` 16.11. 11:36, Build weiter 4.10.3-LIVE.13165946) – alle 3 geprüften Kandidaten mit neuem Modell-Hash. 100i neu (`f982f2636804`, 85 160 statt 89 036 B): Holo 6 693 statt 6 699 Dreiecke (93 662 B), Umriss gleich, 8 Bilder des 100i anders.
+   - **Katalog 17.11.:** 101 statt 105 Schiffe. Abwesend: 600i Executive Edition, Carrack w/ C8X, Carrack Expedition w/ C8X, Cyclone, MOLE Carbon, MOLE Talus, Mustang Alpha Vindicator, Valkyrie Liberator Edition. Neu: `hyun` (32 SCU, ohne `-Create` nicht geschrieben). Import Exit 1.
+2. **Scraper vom Runner – kein Block, kein Rate-Limit.**
+   - API: HTTP 200 in 0,58 s, 72 542 B, Vercel (`x-vercel-cache: BYPASS`), keine Rate-Limit-Header.
+   - Seite `/ops/cargo`: HTTP 200 in 0,63 s, 106 589 B, `"ships"`-Array gefunden, Vercel, keine Rate-Limit-Header.
+   - Modell-Bucket (Supabase hinter Cloudflare): 101 HEAD → **101 × 200**, p50 264 ms, max 711 ms (Lauf 2: 207/1 475 ms); `CF-Cache-Status: DYNAMIC`, `Cache-Control: private, no-cache`; kein 403/429. 2 Modell-GET je 200 in 1,3/1,5 s.
+3. **Gate auf `windows-latest` – rendert, Cross-Repo + zwei Läufe + Tausch in einem Job funktionieren.**
+   - Image win25-vs2026 20261103.298.1, SDK 10.0.404; 1 427 Bilder je Lauf.
+   - Dauer: Build 34–62 s, A1 (ohne Baseline, alle PNG) 206 s, B0 271 s, B (mit Baseline) 139 s, Tausch + Rebuild 3,4 s (bin-Kopie geprüft); setup-dotnet 30 s, setup-python 46 s (nur für `csvdiff.py`).
+   - **B0↔B (K1, selbe VM, alter gegen neuen Stand): 1 414 / 1 414 ohne 100i gleich, Placement 108 / 108**; der 100i selbst ebenfalls gleich (0 abweichende Bilder) → 1 427 / 1 427.
+   - VM↔VM A1↔B0: 1 427 / 1 427, Placement 109 / 109. Lokal (Martins Windows 11) ↔ Runner A1: **1 427 / 1 427**.
+   - Artifact aller PNG: 105,8 MB, Upload 14 s.
+4. **Schwelle – fürs Gate 0 (hash-exakt); SSIM ungeeignet.**
+   - Methode (`spike/compare.py`, lokal): Anteil abweichender Pixel (wie `ViewPictures.Difference`), Anteil mit Kanal-Δ > 8, SSIM (Grau, Gauß 11 × 11, σ 1,5).
+   - „Gleich“ (drei Klassen: lokal↔Runner, VM↔VM, selbe VM alt↔neu ohne Änderung): **Abstand 0**, alle hash-gleich.
+   - „Anders“, holo-v2↔v3 (96 Paare, 12 Schiffe): Pixelanteil min **8,3 · 10⁻⁵** (≈ 10 Pixel), Median 1,2 · 10⁻³, max 0,24; SSIM min 0,845, max **0,999998**.
+   - „Anders“, Re-Export 100i (8 Paare, lokal gerendert): Pixelanteil 2,9 · 10⁻⁴ … 3,0 · 10⁻³, Δ > 8 1,7 · 10⁻⁴ … 3,5 · 10⁻⁴, SSIM 0,99953 … 0,999985.
+   - **Lücke: 0 gegen 8,3 · 10⁻⁵.** Gate = Hash-Vergleich; jede Abweichung ist „anders“. SSIM trennt erst in der 6. Nachkommastelle. Für den Judge („wie stark?“) taugt der Pixelanteil.
+5. **Manifest – gebraucht / fehlt / überflüssig.**
+   - Gebraucht und im Entwurf: `appTag` (Gate-Checkout), `ships.<id>.source` und `missingSince` (8 Schiffe abwesend, 135c/F7C/600i Exec ohne Modell-Anker).
+   - **Fehlt:** `ships.<id>.model {className, sha256}` – Wahl des Modells, Cache-Schlüssel, Erkennung des Re-Exports; `builtFrom.motherlode` als vollständiger Build **plus** Katalog-`updatedAt` (der Re-Export kam ohne Build-Wechsel); `builtFrom.tools` (Byte-Gleichheit hängt an den Pins); `holo.formatVersion` (die App prüft 2); je Holo `bytes` **und** `sha256` (die App prüft beides).
+   - **Korrektur:** `schemaVersion` der Schiffs-JSON ist **6**, nicht 4 (`ShipLoader.SupportedSchemaVersion`).
+   - Nicht gebraucht: Runner-`ImageVersion` (Hashes sind maschinenübergreifend gleich, Baseline entsteht im selben Job); eine Bild-Schwelle; Katalog-SHA (wechselt mit jedem Abruf: 16.11. `84cb4a7d…`, 17.11. `d4b285d1…`, taugt nicht als Änderungssignal). `holo.baseUrl` nicht geprüft (App-Seite, T12.4).
+
+**Das ändert sich am Phasenplan:**
+1. **Gate:** hash-exakt, beide Stände im selben Job, keine gespeicherte Baseline, kein Toleranzmodus. Das Phasen-Gate „Umrisse und Holos per Bildvergleich mit Schwelle“ wird **„byte-gleich“** – Ubuntu erzeugt Holo und Umriss bitgleich zu Windows. T12.1-Akzeptanz „unter der S12.0-Schwelle“ → „byte-gleich zu holo-v3“.
+2. **Runner-Pin:** `ubuntu-24.04` statt `ubuntu-latest`, oder Python-Pin auf ≥ 3.14.6 (dann neu gegen holo-v3 messen). Entscheidung in T12.0; `CLAUDE.md` nennt heute `ubuntu-latest`.
+3. **Änderungserkennung nach Modell-SHA, nicht nach Build:** Motherlode exportiert ohne Build-Wechsel neu, und das Holo ändert sich dann wirklich. Ein Re-Export aller Modelle heißt ≈ 65–70 min Kette → T12.2 plant Laufzeit (ggf. Matrix). Der Judge braucht eine Regel für kleine Änderungen (Pixelanteil 10⁻⁴ … 10⁻³): Release oder PR.
+4. **Import-Datum:** beim Umzug nach T12.1 `updatedAt` als String übernehmen (`-DateKind String` unter pwsh 7, oder Python). Bis dahin erzeugt jeder Linux-Import 99+ Scheinänderungen.
+5. **Erster echter Lauf trifft sofort die Regeln** „verschwunden“ (8 Schiffe) und „neues Schiff“ (`hyun`) sowie eine Rack-Änderung (F7C). Frage an Sciirof: Sind die Varianten absichtlich entfernt?
+6. **Anker-Umzug machbar:** `import-motherlode.ps1` läuft unter pwsh auf Linux unverändert bis aufs Datum; `decimate.ps1`/`run-all.ps1` entfallen.
+7. **E1:** `actions/cache` ist für Fork-PR-Workflows lesbar → den Katalog in T12.2 nicht cachen, oder Fork-Workflows abschalten.
+8. **E3:** Der Tausch im Checkout funktioniert (3,4 s inkl. Rebuild), hängt aber an `CopyToOutputDirectory` → Env-Override in `ShipPictureTests` (T12.5) bleibt vorzuziehen.
+9. **Gate-Laufzeit ≈ 10 min** pro Job mit zwei Bildläufen; `setup-python` auf Windows (46 s) in T12.2 weglassen.
+10. **Lokaler Test vor dem Runner:** `spike/local-wsl.sh` fand die Datumsabweichung vor dem Runner-Lauf. Muster für T12.1: `run.py` erst in WSL Ubuntu 24.04, dann im Workflow.
+
 ### [ ] T12.0 Doku
 
 **Warum:** Zwei Repos brauchen einen gemeinsamen Vertrag, bevor Code entsteht; die Spike-Befunde müssen in den Plan.
@@ -126,6 +172,7 @@ Regeln aus Fehlern, die durchgerutscht sind. Gelten für jeden Task. Übernommen
 - **Ein Skript für lokal und CI.** `run.py` ist der einzige Einstieg; `ship-data.yml` ruft nur Unterbefehle.
 - **Handlauf ist ein Befund.** Anlass v0.5.1: ein halber Tag für drei Schiffe. Jeder Schritt, der einen Menschen braucht, bekommt eine Zeile hier, bis er weg ist.
 - **Kein Startprompt ohne Regeln.** Anlass 17.11.: Die erste CC-Session in diesem Repo lief ohne CLAUDE.md und TASKS.md und hat sich ihre Regeln selbst gegeben. Jedes neue Repo bekommt beide Dateien **vor** der ersten Session.
+- **Keine Logik in YAML-Schritten.** Anlass 17.11. (S12.0): zwei rote Läufe – ein ungepinntes Runner-Image und Inline-Code, der vor dem Runner nie gelaufen war. Workflow-Schritte rufen Skripte; die Skripte laufen vorher lokal in WSL Ubuntu 24.04 mit denselben Pins.
 
 ---
 
