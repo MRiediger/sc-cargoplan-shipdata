@@ -108,122 +108,11 @@ jobs:
           path: cache
           key: spike-catalog-v1
 
-      - name: Catalog through fetch-motherlode.ps1 (offline, pwsh on Linux)
-        id: catalog
-        run: |
-          source spike/say.sh
-          mkdir -p work/motherlode
-          fetched="${{ steps.fetch.outputs.fetched }}"
-          origin=$([ "$fetched" = 1 ] && echo "fetched in this run" || echo "from the cache, fetched $(cat cache/raw/fetched-at 2>/dev/null)")
-          read -r ac at as < cache/raw/api.status || true
-          read -r pc pt pb < cache/raw/page.status || true
-          hdr() { grep -iE '^(HTTP/|x-?ratelimit|ratelimit|retry-after|cf-|server:|content-type:|age:|x-vercel|via:)' "$1" 2>/dev/null | tr -d '\r' | paste -sd ' ' -; }
-          num api.status "$ac"; num api.s "$at"; num api.bytes "$as"; num page.status "$pc"; num page.s "$pt"; num page.bytes "$pb"
-          num api.headers "$(hdr cache/raw/api.headers)"; num page.headers "$(hdr cache/raw/page.headers)"
-          marks=$(grep -c '"ships":\[' cache/raw/page.txt 2>/dev/null || true)
-          say "Motherlode API and cargo page" \
-              "API GET /api/public/v1/cargo-grids (Bearer secret) and page GET /ops/cargo (RSC: 1), $origin" \
-              "API HTTP $ac in ${at} s, $as bytes, headers: $(hdr cache/raw/api.headers); page HTTP $pc in ${pt} s, $pb bytes, \"ships\" array: ${marks:-0}, headers: $(hdr cache/raw/page.headers)" \
-              "$([ "$ac" = 200 ] && [ "$pc" = 200 ] && [ "${marks:-0}" != 0 ] && echo none || echo 'API or page not usable from the runner: finding for T12.1')"
-          pagefile=cache/raw/page.txt
-          if [ "${marks:-0}" = 0 ]; then
-            python -c "import json, sys; sys.path.insert(0, 'spike'); import probe; print(json.dumps({'ships': [{'modelUrl': u} for u in probe.FALLBACK.values()]}, separators=(',', ':')))" > work/page-fallback.txt
-            pagefile=work/page-fallback.txt
-            echo "page not usable: model URLs from the 16 Nov catalog (fallback)"
-          fi
-          rc=0; t=$(now)
-          pwsh -NoProfile -File spike/fetch-motherlode.ps1 -ApiResponse "$PWD/cache/raw/api.json" -PageResponse "$PWD/$pagefile" \
-               -OutDir "$PWD/work/motherlode" -SkipModels || rc=$?
-          num catalog.fetch-ps1.s "$(since "$t")"; num catalog.fetch-ps1.rc "$rc"
-          cat=$(ls work/motherlode/catalog-*.json 2>/dev/null | head -n 1 || true)
-          if [ -n "$cat" ]; then
-            read -r build nships nmodels sha bytes crlf < <(python -c "import hashlib, json, sys; b = open(sys.argv[1], 'rb').read(); c = json.loads(b.decode('utf-8-sig')); print(c['gameBuild'], len(c['ships']), sum(1 for s in c['ships'] if s.get('modelUrl')), hashlib.sha256(b).hexdigest(), len(b), b.count(b'\r\n'))" "$cat")
-            appsrc=$(python -c "import json; print(json.load(open('app/ships/100i.json'))['source'])")
-            num catalog.gameBuild "$build"; num catalog.ships "$nships"; num catalog.withModel "$nmodels"
-            num catalog.sha256 "$sha"; num catalog.bytes "$bytes"; num catalog.crlf "$crlf"
-            echo "catalog=$PWD/$cat" >> "$GITHUB_OUTPUT"
-            found="exit $rc; game build $build (v0.5.1 ships say: $appsrc); $nships ships, $nmodels with a model URL; $bytes bytes, SHA-256 ${sha:0:16}, CRLF lines $crlf"
-          else
-            found="exit $rc; no catalog written"
-          fi
-          num cache.bytes "$(du -sb cache | cut -f1)"
-          say "Catalog (fetch-motherlode.ps1 offline under pwsh $(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'))" \
-              "the saved API answer and page through the unchanged script: format checks, join by className" \
-              "$found; cache folder $(du -sb cache | cut -f1) bytes" \
-              "$([ -n "$cat" ] && echo none || echo 'no catalog: anchor step skipped, chain runs from the fallback model URL')"
-
-      - name: Scraper probe and spike ship
-        id: probe
-        run: |
-          mkdir -p work
-          curl -sSL -o work/holo-v3-manifest.json "https://github.com/$APP_REPO/releases/download/$HOLO_TAG/manifest.json"
-          python spike/probe.py "${{ steps.catalog.outputs.catalog || '-' }}" work/holo-v3-manifest.json "${{ inputs.ship }}" work/models "$UA"
-          source spike/say.sh
-          fetched="${{ steps.fetch.outputs.fetched }}"; fetched=${fetched:-0}
-          heads=$(grep -P '^probe\.head\.count\t' "$SPIKE_OUT/numbers.tsv" | cut -f2)
-          num requests "$fetched API, $fetched page GET, $heads HEAD, 1 model GET"
-          say "Outbound requests to Motherlode and its model bucket (E2)" "every request to cryon.rocks and the Supabase bucket in this run" \
-              "$fetched API call, $fetched page GET, $heads HEAD, 1 model GET" \
-              "none (a re-run with the cache: 0 API, 0 page)"
-
-      - name: Chain flatten -> cull -> ladder -> export -> outline
-        run: |
-          source spike/say.sh
-          rc=0; t=$(now)
-          bash spike/chain.sh "${{ steps.probe.outputs.cls }}" "${{ steps.probe.outputs.glb }}" || rc=$?
-          num chain.total.s "$(since "$t")"; num chain.rc "$rc"
-          say "Chain on ubuntu (${{ steps.probe.outputs.cls }})" \
-              "holo_mesh.py flatten-model, cull, simplify.mjs ref + PP ladder, export, outline - as decimate.ps1 -Source Motherlode, called from bash" \
-              "exit $rc; $(grep -P '^chain\.' "$SPIKE_OUT/numbers.tsv" | tr '\t' '=' | paste -sd ' ' -)" \
-              "$([ $rc = 0 ] && echo 'none; decimate.ps1/run-all.ps1 themselves would need .venv/bin/python and forward slashes' || echo 'chain failed: see the log')"
-          exit $rc
-
-      - name: Outlines and anchor (outlines-v2, import-motherlode.ps1 under pwsh)
-        if: steps.catalog.outputs.catalog != ''
-        run: |
-          source spike/say.sh
-          CAT="${{ steps.catalog.outputs.catalog }}"; CLS="${{ steps.probe.outputs.cls }}"; SLUG="${{ steps.probe.outputs.slug }}"; ID="${{ steps.probe.outputs.id }}"
-          cp -r app/ships work/ships
-          prev="$PWD/app/outlines/ship-outlines.json"
-          rc1=0; t=$(now)
-          pwsh -NoProfile -File app/tools/import-motherlode.ps1 -Catalog "$CAT" -ShipsFolder "$PWD/work/ships" -Outlines "$prev" \
-               -ModelMap "$PWD/work/model-map.csv" > work/import1.log 2>&1 || rc1=$?
-          num anchor.import1.s "$(since "$t")"; num anchor.import1.rc "$rc1"
-          tail -n 40 work/import1.log | sed 's/^/  /'
-          { echo 'id,className,modelKey,sx,sy,sz'; grep "^$ID,$CLS," work/model-map.csv 2>/dev/null || echo "$ID,$CLS,$SLUG,0,0,0"; } > work/map-one.csv
-          read -r gen dv < <(python -c "import json, sys; d = json.load(open(sys.argv[1])); print(d['generatedAt'], d['dataVersion'])" "$prev")
-          keep=$(python -c "import json, sys; print(' '.join(s['slug'] for s in json.load(open(sys.argv[1]))['ships'] if s['slug'] != sys.argv[2]))" "$prev" "$SLUG")
-          t=$(now)
-          python -I spike/holo_mesh.py outlines-v2 work/map-one.csv "$prev" work/ship-outlines.json "$gen" "$dv" $keep
-          num anchor.outlines-v2.s "$(since "$t")"
-          rc2=0; t=$(now)
-          pwsh -NoProfile -File app/tools/import-motherlode.ps1 -Catalog "$CAT" -ShipsFolder "$PWD/work/ships" -Outlines "$PWD/work/ship-outlines.json" \
-               -ModelMap "$PWD/work/model-map-2.csv" > work/import2.log 2>&1 || rc2=$?
-          num anchor.import2.s "$(since "$t")"; num anchor.import2.rc "$rc2"
-          tail -n 40 work/import2.log | sed 's/^/  /'
-          say "Outlines and anchor" \
-              "import-motherlode.ps1 (v0.5.1) under pwsh on Linux with the fresh catalog: model map, racks; outlines-v2 with only $SLUG rebuilt; import again for the anchor from the new floorM" \
-              "import 1 exit $rc1, import 2 exit $rc2 (0 done, 1 something to look at, 2 error); map row: $(sed -n 2p work/map-one.csv)" \
-              "$([ $rc1 = 2 ] || [ $rc2 = 2 ] && echo 'the import errs on Linux: see the log' || echo 'none; exit 1 lists what a person would look at')"
-
-      - name: Compare with holo-v3 / v0.5.1
-        if: always() && steps.probe.outputs.slug != ''
-        run: |
-          SLUG="${{ steps.probe.outputs.slug }}"; ID="${{ steps.probe.outputs.id }}"; CLS="${{ steps.probe.outputs.cls }}"
-          curl -sSL -o work/ref.holo "https://github.com/$APP_REPO/releases/download/$HOLO_TAG/$SLUG.holo"
-          python spike/compare_built.py "$SLUG" "$ID" "$HOLO_WORK/$CLS/PP.holo" work/ref.holo work/holo-v3-manifest.json \
-                 "$HOLO_WORK/$CLS/PP.json" work/ship-outlines.json app/outlines/ship-outlines.json work/ships app/ships
-
-      - name: Collect built data
-        if: always()
-        run: |
-          SLUG="${{ steps.probe.outputs.slug }}"; ID="${{ steps.probe.outputs.id }}"; CLS="${{ steps.probe.outputs.cls }}"
-          mkdir -p built
-          echo "$ID $SLUG $CLS" > built/ship.txt
-          cp "$HOLO_WORK/$CLS/PP.holo" "built/$SLUG.holo" || true
-          cp "$HOLO_WORK/$CLS"/*.json built/ || true
-          cp work/ship-outlines.json "work/ships/$ID.json" work/model-map.csv work/*.log built/ || true
-          ls -l built
+      # Everything after the fetch is one script, the same one a local test runs in WSL Ubuntu 24.04.
+      - name: Catalog, probe, chain, anchor, comparisons (spike/chain-job.sh)
+        env:
+          FETCHED: ${{ steps.fetch.outputs.fetched }}
+        run: bash spike/chain-job.sh "${{ inputs.ship }}"
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -380,27 +269,11 @@ jobs:
       - name: Run B0 - v0.5.1 as released, no baseline (K1)
         run: bash spike/pictures.sh b0 holo-v3
 
-      - name: Swap in the built files and rebuild
+      - name: Swap in the built files and rebuild (spike/swap.sh)
         id: swap
         run: |
-          source spike/say.sh
-          if [ ! -f built/ship.txt ] || [ ! -f "built/$(cut -d' ' -f2 built/ship.txt).holo" ]; then
-            say "Swap built files" "artifact built from the chain job" "missing: the chain did not build" "run B skipped; B0 against A1 still gives VM-to-VM"
-            exit 0
-          fi
-          read -r ID SLUG CLS < built/ship.txt
-          echo "id=$ID" >> "$GITHUB_OUTPUT"
-          same() { python -c "import sys; n = lambda p: open(p, 'rb').read().replace(b'\r\n', b'\n'); print('same' if n(sys.argv[1]) == n(sys.argv[2]) else 'different')" "$1" "$2"; }
-          s1=$(same "built/$ID.json" "app/ships/$ID.json"); s2=$(same built/ship-outlines.json app/outlines/ship-outlines.json); s3=$(same "built/$SLUG.holo" "holo-v3/$SLUG.holo")
-          t=$(now)
-          cp "built/$ID.json" "app/ships/$ID.json"
-          cp built/ship-outlines.json app/outlines/ship-outlines.json
-          cp "built/$SLUG.holo" "holo-v3/$SLUG.holo"
-          dotnet build app/tests/CargoPlan.App.Tests -c Release > rebuild.log 2>&1 || { tail -n 60 rebuild.log; exit 1; }
-          s=$(since "$t"); num gate.swap-rebuild.s "$s"
-          say "Swap built files into the app checkout (E3)" "ships/$ID.json, outlines/ship-outlines.json, $SLUG.holo from the ubuntu chain; rebuild, since ships/ and outlines/ are copied to bin" \
-              "ship json $s1, outlines $s2, holo $s3 (against v0.5.1/holo-v3); swap + rebuild $s s" \
-              "none; E3 decides whether the test gets a data-folder override instead"
+          bash spike/swap.sh
+          echo "id=$(cat "$SPIKE_OUT/swap.id")" >> "$GITHUB_OUTPUT"
 
       - name: Run B - built files, baseline B0, expected the spike ship
         if: steps.swap.outputs.id != ''

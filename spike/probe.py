@@ -1,8 +1,7 @@
 """spike/probe.py - question 2 of S12.0: are the model URLs reachable from a runner? Throwaway measuring code, stdlib only.
 
-HEAD every model URL of the catalog (200 ms apart, no retry, no GET), pick the spike ship (the first candidate whose
-catalog model is the one holo-v3 was built from), GET only that model and check its SHA-256 against holo-v3's
-manifest. Writes ship/className/slug/id/glb to $GITHUB_OUTPUT and numbers to $SPIKE_OUT/numbers.tsv.
+HEAD every model URL of the catalog (200 ms apart, no retry, no GET), GET the spike ship's model as holo-v3 had it and as the catalog has it now (one GET each),
+and check both SHA-256 against holo-v3's manifest. Writes CLS/SLUG/ID/GLB/GLB_NEW/HEADS/GETS to $PROBE_OUT (default $SPIKE_OUT/ship.env) and numbers to $SPIKE_OUT/numbers.tsv.
 
 usage: python probe.py <catalog.json or -> <holo-v3 manifest.json> <preferred className> <glb out dir> <user agent>
 """
@@ -55,70 +54,74 @@ def main(catalog_path, manifest_path, preferred, glb_dir, ua):
     else:
         urls, source = dict(FALLBACK), 'fallback (no catalog in this run)'
 
-    # 1) HEAD every model URL
+    # 1) HEAD every model URL (PROBE_HEAD=0 skips it, for local tests)
     heads, seen = [], {}
-    for cls in sorted(urls):
+    for cls in sorted(urls) if os.environ.get('PROBE_HEAD', '1') != '0' else []:
         status, secs, headers, _ = request(urls[cls], 'HEAD', ua)
         heads.append((cls, status, secs, int(headers.get('Content-Length', 0) or 0)))
         for k, v in headers.items():
             if k.lower().startswith(INTERESTING) and k not in seen:
                 seen[k] = v
         time.sleep(0.2)
-    by_status = {}
-    for _, s, _, _ in heads:
-        by_status[str(s)] = by_status.get(str(s), 0) + 1
-    lat = [h[2] for h in heads]
-    total = sum(h[3] for h in heads)
-    num('probe.head.count', len(heads))
-    num('probe.head.status', json.dumps(by_status, sort_keys=True))
-    num('probe.head.latency.p50.ms', round(1000 * statistics.median(lat)))
-    num('probe.head.latency.max.ms', round(1000 * max(lat)))
-    num('probe.models.bytes.total', total)
-    num('probe.models.bytes.max', max(h[3] for h in heads))
-    num('probe.headers', json.dumps(seen, sort_keys=True))
-    bad = [f'{c}:{s}' for c, s, _, _ in heads if s != 200]
-    say('Scraper probe: HEAD on every model URL',
-        f'{len(heads)} model URLs from the {source}, HEAD with User-Agent "{ua}", 200 ms apart, no retry',
-        f'status {json.dumps(by_status, sort_keys=True)}; latency p50 {round(1000 * statistics.median(lat))} ms, '
-        f'max {round(1000 * max(lat))} ms; {total} bytes in all (cold model cache); headers seen: {json.dumps(seen, sort_keys=True)}',
-        'none' if not bad else f'not reachable: {", ".join(bad[:10])} - the pipeline needs another route for these')
+    if heads:
+        by_status = {}
+        for _, s, _, _ in heads:
+            by_status[str(s)] = by_status.get(str(s), 0) + 1
+        lat = [h[2] for h in heads]
+        total = sum(h[3] for h in heads)
+        num('probe.head.count', len(heads))
+        num('probe.head.status', json.dumps(by_status, sort_keys=True))
+        num('probe.head.latency.p50.ms', round(1000 * statistics.median(lat)))
+        num('probe.head.latency.max.ms', round(1000 * max(lat)))
+        num('probe.models.bytes.total', total)
+        num('probe.models.bytes.max', max(h[3] for h in heads))
+        num('probe.headers', json.dumps(seen, sort_keys=True))
+        bad = [f'{c}:{s}' for c, s, _, _ in heads if s != 200]
+        say('Scraper probe: HEAD on every model URL',
+            f'{len(heads)} model URLs from the {source}, HEAD with User-Agent "{ua}", 200 ms apart, no retry',
+            f'status {json.dumps(by_status, sort_keys=True)}; latency p50 {round(1000 * statistics.median(lat))} ms, '
+            f'max {round(1000 * max(lat))} ms; {total} bytes in all (cold model cache); headers seen: {json.dumps(seen, sort_keys=True)}',
+            'none' if not bad else f'not reachable: {", ".join(bad[:10])} - the pipeline needs another route for these')
 
-    # 2) Pick the ship: the first candidate (preferred first) whose catalog model is holo-v3's
+    # 2) The ship: the preferred candidate with a holo-v3 entry. Run 2 (17 Nov) found every candidate's model re-exported
+    #    under a new hash at the same game build, so two models are fetched: the one holo-v3 was built from (old: the pure
+    #    platform drift) and the catalog's (new: what a re-export changes).
     order = sorted(CANDIDATES, key=lambda c: c[0] != preferred)
-    notes, pick = [], None
-    for cls, slug, sid in order:
-        m = manifest.get(slug)
-        url = urls.get(cls, '')
-        h12 = url.rsplit('-', 1)[-1].removesuffix('.glb') if url else ''
-        if m and h12 and m['rawSha256'].startswith(h12):
-            pick = (cls, slug, sid, url, m)
-            break
-        notes.append(f'{cls}: catalog model {h12 or "none"}, holo-v3 built from {m["rawSha256"][:12] if m else "none"}')
-    if not pick:
-        say('Pick the spike ship', 'candidates ' + ', '.join(c[0] for c in order), '; '.join(notes),
-            'no candidate model is unchanged since holo-v3: pick another ship by hand')
-        sys.exit(1)
-    cls, slug, sid, url, m = pick
-
-    # 3) GET that one model
-    status, secs, headers, body = request(url, 'GET', ua)
-    sha = hashlib.sha256(body).hexdigest()
+    cls, slug, sid = next(c for c in order if c[1] in manifest)
+    m = manifest[slug]
+    base = 'https://pjacfaoziybemsgwartu.supabase.co/storage/v1/object/public/ship-models/'
+    old_url = f'{base}{cls}-{m["rawSha256"][:12]}.glb'
+    new_url = urls.get(cls, '')
     os.makedirs(glb_dir, exist_ok=True)
-    glb = os.path.join(glb_dir, url.rsplit('/', 1)[-1])
-    open(glb, 'wb').write(body)
-    num('probe.model.get.status', status)
-    num('probe.model.get.ms', round(1000 * secs))
-    num('probe.model.bytes', len(body))
-    num('probe.model.sha256.matches.holo-v3', sha == m['rawSha256'])
-    say('Pick the spike ship and GET its model',
-        f'candidates in order {", ".join(c[0] for c in order)}; model hash in the catalog URL against holo-v3 rawSha256',
-        f'{cls} ({slug}, id {sid}){" after " + "; ".join(notes) if notes else ""}; GET {status} in {round(1000 * secs)} ms, '
-        f'{len(body)} bytes, SHA-256 {"equals" if sha == m["rawSha256"] else "DIFFERS from"} holo-v3\'s model',
-        'none' if status == 200 and sha == m['rawSha256'] else 'model not as in holo-v3: the byte comparisons below say nothing')
-    if os.environ.get('GITHUB_OUTPUT'):
-        with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
-            f.write(f'cls={cls}\nslug={slug}\nid={sid}\nglb={glb}\nheads={len(heads)}\n')
-    if status != 200:
+    got, texts = {}, []
+    for kind, url in (('old', old_url), ('new', new_url)):
+        if not url or (kind == 'new' and url == old_url):
+            continue
+        status, secs, headers, body = request(url, 'GET', ua)
+        sha = hashlib.sha256(body).hexdigest()
+        num(f'probe.model.{kind}.get.status', status)
+        num(f'probe.model.{kind}.get.ms', round(1000 * secs))
+        num(f'probe.model.{kind}.bytes', len(body))
+        num(f'probe.model.{kind}.sha256', sha)
+        texts.append(f'{kind} {url.rsplit("/", 1)[-1]}: GET {status} in {round(1000 * secs)} ms, {len(body)} bytes, '
+                     f'SHA-256 {"= holo-v3 rawSha256" if sha == m["rawSha256"] else sha[:12]}')
+        if status == 200:
+            path = os.path.join(glb_dir, url.rsplit('/', 1)[-1])
+            open(path, 'wb').write(body)
+            got[kind] = (path, sha)
+    same_model = 'new' not in got or got['new'][1] == m['rawSha256']
+    num('probe.model.changed.since.holo-v3', not same_model)
+    say('Spike ship and its models',
+        f"{cls} ({slug}, id {sid}); the model holo-v3 was built from (rawSha256 {m['rawSha256'][:12]}) and the catalog's",
+        '; '.join(texts) + ('' if same_model else "; the catalog model DIFFERS from holo-v3's at the same game build"),
+        'none' if 'old' in got and same_model else
+        'the old model is the platform-drift measurement, the new one shows what a re-export changes' if 'old' in got else
+        "holo-v3's model is gone from the bucket: the comparisons mix platform drift and model change")
+    glb = got.get('old', got.get('new', ('',)))[0]
+    glb_new = got['new'][0] if 'new' in got and 'old' in got and not same_model else ''
+    with open(os.environ.get('PROBE_OUT', os.path.join(OUT, 'ship.env')), 'w', encoding='utf-8') as f:
+        f.write(f'CLS={cls}\nSLUG={slug}\nID={sid}\nGLB={glb}\nGLB_NEW={glb_new}\nHEADS={len(heads)}\nGETS={len(texts)}\n')
+    if not got:
         sys.exit(1)
 
 

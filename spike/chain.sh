@@ -18,7 +18,7 @@ step() {
     local name=$1; shift
     local t; t=$(now)
     "$@" > "$W/$name.out"
-    num "chain.$name.s" "$(since "$t")"
+    num "${CHAIN_KEY:-chain}.$name.s" "$(since "$t")"
     sed 's/^/  /' "$W/$name.out"
 }
 jget() { $PY -c "import json,sys; v=json.load(open(sys.argv[1]))$2; print(v)" "$1"; }
@@ -43,9 +43,9 @@ r = json.load(open(sys.argv[1])); r['passed'] = len(r['fails']) == 0; r['budget'
 open(sys.argv[3], 'w').write(json.dumps(r, separators=(',', ':')))" "$W/PP-$final.json" "$final" "$W/PP.json"
 step outline $PY -I "$MESH" outline "$CLS"
 
-num chain.lengthM "$LEN"
-num chain.budget "$final"
-num chain.workdir.bytes "$(du -sb "$W" | cut -f1)"
-num chain.holo.bytes "$(stat -c %s "$W/PP.holo")"
+num "${CHAIN_KEY:-chain}.lengthM" "$LEN"
+num "${CHAIN_KEY:-chain}.budget" "$final"
+num "${CHAIN_KEY:-chain}.workdir.bytes" "$(du -sb "$W" | cut -f1)"
+num "${CHAIN_KEY:-chain}.holo.bytes" "$(stat -c %s "$W/PP.holo")"
 echo "work folder $W:"
 ls -l "$W" | sed 's/^/  /'
