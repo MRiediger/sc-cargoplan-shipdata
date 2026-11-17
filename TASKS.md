@@ -15,7 +15,7 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 
 **Vorbereitung (Martin, erledigt 17.11.):** Repo öffentlich und leer angelegt, Secret `MOTHERLODE_API_KEY`, Actions „Read and write“ + „create and approve pull requests“. Parallel: Anfrage an Sciirof (Modell-Endpunkt, Erlaubnis Monatslauf, Cyclone, 135c-Transform) – Antwort ausstehend.
 
-### [ ] S12.0 Spike – ein Schiff end-to-end auf Actions (Plan freigegeben 17.11.2026, kein Prod-Code)
+### [x] S12.0 Spike – ein Schiff end-to-end auf Actions (Plan freigegeben 17.11.2026, kein Prod-Code, abgenommen 17.11.2026)
 
 **Warum:** Fünf Fragen ändern das Design; sie werden gemessen, bevor T12.1 etwas Dauerhaftes baut.
 **Plan:** `docs/plans/S12.0-spike.md`. **Schiff:** ORIG 100i (Fallback Avenger Titan, dann Nomad, aus demselben Katalog). **Branch:** `main`, Workflow `spike.yml` (`workflow_dispatch`), Spike-Code unter `spike/`, wird nach T12.2 gelöscht.
@@ -97,11 +97,20 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 3. **Verschwunden: 6 neu, alle Varianten.** Gegenüber dem Archiv vom 16.11. fehlen am 17.11. MOLE Carbon/Talus (`ARGO_MOLE`), Carrack w/C8X und Carrack Expedition w/C8X (`ANVL_Carrack`, `ANVL_Carrack_Expedition`), Mustang Alpha Vindicator (`CNOU_Mustang_Alpha`) und Valkyrie Liberator Edition (`ANVL_Valkyrie`). Jede teilt ihre `className` mit dem Basisschiff, das noch im Katalog steht. Cyclone und 600i Executive fehlten schon am 16.11.; der F7C Hornet Mk II ist zurück. Keine Umbenennung erkennbar; `hyun` (32 SCU) lässt sich ohne den Katalog vom 17.11. (nur im Actions-Cache) keiner `className` zuordnen → im ersten T12.1-Lauf prüfen. Regel siehe Punkt 11 oben.
 4. **`CLAUDE.md` korrigiert:** `ubuntu-24.04` für die Kette, `schemaVersion` 6.
 
+**Lauf 4 (17.11., nach `bafb244`, [44101340566](https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44101340566), chain grün):**
+- Anfragen: „0 API, 0 page GET, 101 HEAD, 2 model GET“ (Katalog aus dem Cache).
+- **Der Datums-Fix wirkt.** `source` steht jetzt im ISO-Format wie die API (`2026-11-16T11:36:30.299Z`).
+- **99 Dateien unterscheiden sich in `source`**, weil der Katalog vom 17.11. ein anderes `updatedAt` hat (16.11. statt 12.11.). Das ist eine echte Quelländerung, keine Formatfrage. Über `source` hinaus geändert: nur `f7c_hornet_mk_ii`.
+- Holo, PP-Metriken und `ship-outlines.json` weiter byte-gleich zu holo-v3.
+
+- [x] Abnahme Martin (17.11.2026), Review im Master-Chat
+
 ### [ ] T12.0 Doku
 
 **Warum:** Zwei Repos brauchen einen gemeinsamen Vertrag, bevor Code entsteht; die Spike-Befunde müssen in den Plan.
 - `docs/decisions.md` hier: SD1 „Zwei Repos“ (Kontext, Gegenargument: zwei Arbeitsordner, Cross-Repo-Gate), SD2 Manifest-Format, SD3 Gate-Verfahren aus S12.0, SD4 Release-Reihe `ships-YYYY.MM[.N]`, Pre-Release aus, letzte zwei bleiben
-- `docs/manifest-format.md` (Felder aus S12.0 Frage 5, `schemaVersion`-Vertrag, `holo: null`)
+- `docs/manifest-format.md` (Felder aus S12.0 Frage 5, `schemaVersion`-Vertrag, `holo: null`). Zusätzlich zu `builtFrom.tools`: **`pipelineCommit`** (Git-SHA der Pipeline). Ohne ihn ist ein Holo nicht reproduzierbar; holo-v3 führt ihn schon (`e6943af`).
+- SD-Eintrag **„actions/cache und Fork-PRs“** (S12.0 E1) als eigene Entscheidung: Workflows aus Fork-PRs können den Cache des Default-Branch lesen. Optionen: Katalog nicht cachen, oder Fork-PR-Workflows abschalten. Gegenargument und Konsequenz wie bei SD1–SD4.
 - `TOOLS.md` bereinigt, Pins aus dem Spike bestätigt
 - **App:** D-Eintrag (nächste freie Nummer) „Ship data channel“ mit Zielbild, Verweis auf SD1–SD4; Phase-12-Abschnitt in `sc-cargoplan/TASKS.md` mit T12.3–T12.6; Kollision „P12 Look“ auflösen
 - Spike-Befunde in diesen Task-Schnitt einarbeiten (Reihenfolge, Gates, Anker-Umzug)
@@ -120,7 +129,40 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 - Jede Stufe: geprüft / gefunden / zu tun; `pytest` für jede Regel, einmal provoziert rot
 - `LICENSE` (MIT), `NOTICE.md` (Daten), README
 
-**Akzeptanz:** Lokal ein voller Lauf gegen den Katalog 4.10.3: `ships/` **byteidentisch** zu `sc-cargoplan@main`, Umrisse und Holos **unter der S12.0-Schwelle** gegen holo-v3; `verify` meldet Cyclone als `missingSince` und 135c aus `overrides.json`; Tests grün. Martin kann die fünf Unterbefehle und ihre Übergaben nennen.
+**Regeln aus S12.0:**
+- **`diff`:** Schiffs-JSON ohne `source` vergleichen (Hash über den Inhalt abzüglich des Feldes). `source` wird beim Schreiben aus `builtFrom.motherlode` (Build + `updatedAt`) gesetzt und nie verglichen. Anlass: Lauf 4 – ein neues `updatedAt` ändert `source` in 99 Dateien.
+- **`verify`, Varianten:** Die Daten des Basisschiffs werden nur übernommen, wenn die Rack-Daten der Variante im letzten Manifest hash-gleich zum Basisschiff waren. Sonst gilt `missingSince` wie für jedes andere Schiff.
+- **`verify`, Stopp:** Mehr als **3** neu Verschwundene ohne Basisschiff → PR-Pfad. Die Zahl ist zu bestätigen.
+
+**Aus dem Spike übernommen:**
+
+| Datei | Herkunft | Ziel | Grund |
+|---|---|---|---|
+| `holo_mesh.py`, `simplify.mjs`, `package.json`, `package-lock.json`, `requirements.txt` | `sc-ship-outlines` `25b4031`, unverändert | `tools/`, **byte-gleich**; SHA-256 in `docs/provenance.md` | S12.0: byte-gleiche Holos auf Ubuntu. Kein Reformat, kein Rename, bis ein eigener Task mit Messung das verlangt |
+| `chain.sh` | Spike | Logik der `build`-Stufe | Reihenfolge, Argumente, Abbruch an der ersten Leiterstufe ohne Fails – reproduziert `decimate.ps1` byte-gleich |
+| `chain-job.sh` | Spike | Orchestrierung von `run.py` | Stufenfolge, Stopp-Regeln, „geprüft / gefunden / zu tun“ |
+| `probe.py` | Spike | `fetch` | HEAD-Burst, Modell-SHA als Cache-Schlüssel, Kandidatenwahl |
+| `fetch-motherlode.ps1` | `sc-ship-outlines` | `fetch` in Python | ein API-Ruf, Retry-After, User-Agent 1:1; pwsh bleibt nur für den Anker (`import-motherlode.ps1`, mit Datums-Fix aus S12.0) |
+| `compare_built.py` | Spike | `verify` | Byte-Gleichheit von Holo, Umriss und JSON gegen das letzte Manifest |
+| `compare.py` | Spike | Judge in `verify` | Pixelanteil; SSIM streichen (Befund 4) |
+| `csvdiff.py`, `pictures.sh`, `swap.sh` | Spike | `tools/gate/` für T12.2 | `swap.sh` entfällt mit T12.5 (Env-Override) |
+| `say.sh` | Spike | Python-Logger | Muster „checked / found / to do“ + `numbers.tsv` |
+| `local-wsl.sh` | Spike | `tools/local-wsl.sh`, ruft `run.py` | Test in WSL Ubuntu 24.04 vor jedem Workflow-Lauf |
+| `SOURCE.md` | Spike | `docs/provenance.md` | Herkunft und SHA-256 der übernommenen Dateien |
+
+Regel: `spike/` wird erst gelöscht, wenn `run.py build` den 100i byte-gleich zu den Referenzen liefert: `orig-100i.holo` = holo-v3-Asset (`f05c9c4f…`), Umriss-Eintrag = `outlines/ship-outlines.json` von v0.5.1, `ships/100i.json` = v0.5.1 (mit dem Archiv vom 16.11.).
+
+**Präzisierung, zur Ratifizierung mit der Freigabe des T12.1-Plans** (Abweichungen vom Auftrag vom 17.11.):
+1. *SHA „in die Datei“* → nach `docs/provenance.md`. Ein SHA in der Datei ändert die Datei und damit ihren SHA; `package.json` kennt keine Kommentare.
+2. *Referenz „`built/` aus Lauf 3“* → holo-v3-Asset und v0.5.1. Artifacts verfallen nach 7 Tagen (`retention-days: 7`, Lauf 3 am 24.11.); die Referenzen sind dauerhaft.
+3. *Katalog nach `tests/fixtures/`* → nicht committen (A17: Kataloge nie ins Git, Repo öffentlich; Fixtures klein und synthetisch). Sichern lokal und gitignored in `cache/`. Der Actions-Cache lässt sich nicht direkt herunterladen, und ein Artifact wäre öffentlich (ebenfalls A17). Den Weg klärt die T12.1-Session als erste Handlung.
+4. *„0 neu, hyun erst mit dem Katalog, der ihn enthält“* → der Katalog vom 17.11. **enthält** `hyun` (Import-Log Lauf 3: `new hyun 1 grids, 32 SCU`). Erwartet also 1 neu.
+
+**Akzeptanz:**
+- Lokal ein voller Lauf gegen den Katalog 4.10.3: `ships/` **byteidentisch** zu `sc-cargoplan@main`, Umrisse und Holos **byte-gleich** zu holo-v3 (S12.0: Schwelle 0); `verify` meldet Cyclone als `missingSince` und 135c aus `overrides.json`; Tests grün.
+- **Erste Handlung der Session:** den Katalog vom 17.11. (Actions-Cache `spike-catalog-v1`, Lauf 3/4) sichern, bevor der Cache verfällt (7 Tage ohne Zugriff). Wo und wie: siehe Präzisierung 3.
+- `diff` Katalog 17.11. gegen den Stand aus dem Archiv 16.11. (= v0.5.1): Schiffs-JSON ohne `source` **1 geändert** (F7C), **1 neu** (`hyun`), **6 verschwunden** (Varianten mit Basisschiff); geänderte Modell-SHAs (Re-Export) separat gezählt.
+- Martin kann die fünf Unterbefehle und ihre Übergaben nennen.
 
 ### [ ] T12.2 Workflow `ship-data.yml`
 
