@@ -1,0 +1,2 @@
+# LF everywhere: the Windows gate jobs run the spike scripts under Git Bash, and CRLF breaks bash.
+* text=auto eol=lf
