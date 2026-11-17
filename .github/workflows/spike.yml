@@ -272,7 +272,7 @@ jobs:
       - name: Runner, holo releases, build
         run: |
           source spike/say.sh
-          seg=$(pwsh -NoProfile -Command "(Get-Item C:\Windows\Fonts\segoeui.ttf).VersionInfo.FileVersion")
+          seg=$(sha256sum /c/Windows/Fonts/segoeui.ttf 2>/dev/null | cut -c1-16 || echo missing)
           t=$(now)
           gh release download "$HOLO_TAG" -R "$APP_REPO" -D holo-v3
           gh release download holo-v2 -R "$APP_REPO" -D holo-v2
