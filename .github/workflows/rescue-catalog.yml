@@ -1,0 +1,35 @@
+# T12.1 step 0 (docs/plans/T12.1-pipeline.md): the 17 Nov catalog lives only in the spike's Actions cache, which cannot
+# be downloaded directly and expires 7 days after its last use. This run restores it and uploads it encrypted for one
+# recipient (spike/rescue.sh); the artifact holds ciphertext only and is deleted after the download. No API call.
+# Deleted after one successful use.
+name: T12.1 catalog rescue
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rescue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same key and path as spike.yml, so the same cache version; restore only, nothing is saved.
+      - uses: actions/cache/restore@v6
+        with:
+          path: cache
+          key: spike-catalog-v1
+          fail-on-cache-miss: true
+
+      - name: Pack and encrypt (spike/rescue.sh)
+        run: bash spike/rescue.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: catalog-2026-11-17-encrypted
+          path: rescue/catalog.tar.cms
+          retention-days: 1
+          if-no-files-found: error
