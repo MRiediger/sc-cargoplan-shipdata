@@ -1,0 +1,442 @@
+# S12.0 spike (docs/plans/S12.0-spike.md): one ship end-to-end, to measure. Throwaway; not the pipeline.
+#   chain   (ubuntu)   catalog (API once, cached) -> scraper probe -> model -> flatten -> ladder -> export -> outline -> anchor
+#   gate-a  (windows)  app v0.5.1 as released: picture run A1 (holo-v3), A2 (holo-v2, the real changes)
+#   gate-b  (windows)  same VM: B0 (as released) and B (built files swapped in), baseline B0 (K1)
+# Every step ends with "checked / found / to do" in the log and the job summary; numbers go to the numbers-* artifacts.
+name: S12.0 spike
+
+on:
+  workflow_dispatch:
+    inputs:
+      ship:
+        description: Preferred spike ship; the next candidate is taken if its model changed since holo-v3
+        type: choice
+        options: [ORIG_100i, AEGS_Avenger_Titan, CNOU_Nomad]
+        default: ORIG_100i
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike
+  cancel-in-progress: false
+
+env:
+  APP_REPO: MRiediger/sc-cargoplan
+  APP_TAG: v0.5.1
+  HOLO_TAG: holo-v3
+  UA: sc-cargoplan-outlines/0.2 (fan project)
+
+jobs:
+  chain:
+    name: chain (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPIKE_OUT: ${{ github.workspace }}/out
+      HOLO_WORK: ${{ github.workspace }}/work/holo
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out the app at its tag
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: ${{ env.APP_TAG }}
+          path: app
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14.5'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.16.0'
+
+      - name: Toolchain against the pins
+        run: |
+          source spike/say.sh
+          t=$(now); python -m pip install --disable-pip-version-check -q -r spike/requirements.txt; num setup.pip.s "$(since "$t")"
+          t=$(now); npm ci --prefix spike --no-audit --no-fund --silent; num setup.npm.s "$(since "$t")"
+          py=$(python -c 'import platform; print(platform.python_version())')
+          np=$(python -c 'import numpy; print(numpy.__version__)')
+          cv=$(python -m pip show opencv-python-headless | sed -n 's/^Version: //p')
+          nd=$(node --version)
+          ms=$(node -p "require('./spike/node_modules/meshoptimizer/package.json').version")
+          ps=$(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+          got="python $py, numpy $np, opencv-python-headless $cv, node $nd, meshoptimizer $ms"
+          want="python 3.14.5, numpy 2.5.3, opencv-python-headless 5.0.0.93, node v24.16.0, meshoptimizer 1.3.0"
+          for kv in "python $py" "numpy $np" "opencv $cv" "node $nd" "meshoptimizer $ms" "pwsh $ps"; do num "version.${kv%% *}" "${kv#* }"; done
+          num runner.image "$ImageOS $ImageVersion"
+          say "Toolchain (ubuntu)" "installed versions against the TOOLS.md pins: $want" \
+              "$got; pwsh $ps; runner $ImageOS $ImageVersion" \
+              "$([ "$got" = "$want" ] && echo none || echo 'a version differs from its pin: finding for TOOLS.md')"
+
+      - name: Restore the catalog cache (the API is called only without it)
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: cache
+          key: spike-catalog-v1
+
+      - name: Motherlode API (one call) and cargo page (one GET)
+        id: fetch
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          MOTHERLODE_API_KEY: ${{ secrets.MOTHERLODE_API_KEY }}
+        run: |
+          mkdir -p cache/raw
+          echo "fetched=1" >> "$GITHUB_OUTPUT"
+          date -u +%FT%TZ > cache/raw/fetched-at
+          api=$(curl -sS -o cache/raw/api.json -D cache/raw/api.headers -w '%{http_code} %{time_total} %{size_download}' \
+                -H "Authorization: Bearer $MOTHERLODE_API_KEY" -A "$UA" https://cryon.rocks/api/public/v1/cargo-grids || true)
+          echo "${api:-000 0 0}" > cache/raw/api.status
+          page=$(curl -sS -o cache/raw/page.txt -D cache/raw/page.headers -w '%{http_code} %{time_total} %{size_download}' \
+                 -H 'RSC: 1' -A "$UA" https://cryon.rocks/ops/cargo || true)
+          echo "${page:-000 0 0}" > cache/raw/page.status
+          echo "API: $(cat cache/raw/api.status); page: $(cat cache/raw/page.status)"
+
+      # Saved even when the call failed: a re-run then finds the cache and never calls the API again.
+      - name: Save the catalog cache
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: cache
+          key: spike-catalog-v1
+
+      - name: Catalog through fetch-motherlode.ps1 (offline, pwsh on Linux)
+        id: catalog
+        run: |
+          source spike/say.sh
+          mkdir -p work/motherlode
+          fetched="${{ steps.fetch.outputs.fetched }}"
+          origin=$([ "$fetched" = 1 ] && echo "fetched in this run" || echo "from the cache, fetched $(cat cache/raw/fetched-at 2>/dev/null)")
+          read -r ac at as < cache/raw/api.status || true
+          read -r pc pt pb < cache/raw/page.status || true
+          hdr() { grep -iE '^(HTTP/|x-?ratelimit|ratelimit|retry-after|cf-|server:|content-type:|age:|x-vercel|via:)' "$1" 2>/dev/null | tr -d '\r' | paste -sd ' ' -; }
+          num api.status "$ac"; num api.s "$at"; num api.bytes "$as"; num page.status "$pc"; num page.s "$pt"; num page.bytes "$pb"
+          num api.headers "$(hdr cache/raw/api.headers)"; num page.headers "$(hdr cache/raw/page.headers)"
+          marks=$(grep -c '"ships":\[' cache/raw/page.txt 2>/dev/null || true)
+          say "Motherlode API and cargo page" \
+              "API GET /api/public/v1/cargo-grids (Bearer secret) and page GET /ops/cargo (RSC: 1), $origin" \
+              "API HTTP $ac in ${at} s, $as bytes, headers: $(hdr cache/raw/api.headers); page HTTP $pc in ${pt} s, $pb bytes, \"ships\" array: ${marks:-0}, headers: $(hdr cache/raw/page.headers)" \
+              "$([ "$ac" = 200 ] && [ "$pc" = 200 ] && [ "${marks:-0}" != 0 ] && echo none || echo 'API or page not usable from the runner: finding for T12.1')"
+          pagefile=cache/raw/page.txt
+          if [ "${marks:-0}" = 0 ]; then
+            python -c "import json, sys; sys.path.insert(0, 'spike'); import probe; print(json.dumps({'ships': [{'modelUrl': u} for u in probe.FALLBACK.values()]}, separators=(',', ':')))" > work/page-fallback.txt
+            pagefile=work/page-fallback.txt
+            echo "page not usable: model URLs from the 16 Nov catalog (fallback)"
+          fi
+          rc=0; t=$(now)
+          pwsh -NoProfile -File spike/fetch-motherlode.ps1 -ApiResponse "$PWD/cache/raw/api.json" -PageResponse "$PWD/$pagefile" \
+               -OutDir "$PWD/work/motherlode" -SkipModels || rc=$?
+          num catalog.fetch-ps1.s "$(since "$t")"; num catalog.fetch-ps1.rc "$rc"
+          cat=$(ls work/motherlode/catalog-*.json 2>/dev/null | head -n 1 || true)
+          if [ -n "$cat" ]; then
+            read -r build nships nmodels sha bytes crlf < <(python -c "import hashlib, json, sys; b = open(sys.argv[1], 'rb').read(); c = json.loads(b.decode('utf-8-sig')); print(c['gameBuild'], len(c['ships']), sum(1 for s in c['ships'] if s.get('modelUrl')), hashlib.sha256(b).hexdigest(), len(b), b.count(b'\r\n'))" "$cat")
+            appsrc=$(python -c "import json; print(json.load(open('app/ships/100i.json'))['source'])")
+            num catalog.gameBuild "$build"; num catalog.ships "$nships"; num catalog.withModel "$nmodels"
+            num catalog.sha256 "$sha"; num catalog.bytes "$bytes"; num catalog.crlf "$crlf"
+            echo "catalog=$PWD/$cat" >> "$GITHUB_OUTPUT"
+            found="exit $rc; game build $build (v0.5.1 ships say: $appsrc); $nships ships, $nmodels with a model URL; $bytes bytes, SHA-256 ${sha:0:16}, CRLF lines $crlf"
+          else
+            found="exit $rc; no catalog written"
+          fi
+          num cache.bytes "$(du -sb cache | cut -f1)"
+          say "Catalog (fetch-motherlode.ps1 offline under pwsh $(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'))" \
+              "the saved API answer and page through the unchanged script: format checks, join by className" \
+              "$found; cache folder $(du -sb cache | cut -f1) bytes" \
+              "$([ -n "$cat" ] && echo none || echo 'no catalog: anchor step skipped, chain runs from the fallback model URL')"
+
+      - name: Scraper probe and spike ship
+        id: probe
+        run: |
+          mkdir -p work
+          curl -sSL -o work/holo-v3-manifest.json "https://github.com/$APP_REPO/releases/download/$HOLO_TAG/manifest.json"
+          python spike/probe.py "${{ steps.catalog.outputs.catalog || '-' }}" work/holo-v3-manifest.json "${{ inputs.ship }}" work/models "$UA"
+          source spike/say.sh
+          fetched="${{ steps.fetch.outputs.fetched }}"; fetched=${fetched:-0}
+          heads=$(grep -P '^probe\.head\.count\t' "$SPIKE_OUT/numbers.tsv" | cut -f2)
+          num requests "$fetched API, $fetched page GET, $heads HEAD, 1 model GET"
+          say "Outbound requests to Motherlode and its model bucket (E2)" "every request to cryon.rocks and the Supabase bucket in this run" \
+              "$fetched API call, $fetched page GET, $heads HEAD, 1 model GET" \
+              "none (a re-run with the cache: 0 API, 0 page)"
+
+      - name: Chain flatten -> cull -> ladder -> export -> outline
+        run: |
+          source spike/say.sh
+          rc=0; t=$(now)
+          bash spike/chain.sh "${{ steps.probe.outputs.cls }}" "${{ steps.probe.outputs.glb }}" || rc=$?
+          num chain.total.s "$(since "$t")"; num chain.rc "$rc"
+          say "Chain on ubuntu (${{ steps.probe.outputs.cls }})" \
+              "holo_mesh.py flatten-model, cull, simplify.mjs ref + PP ladder, export, outline - as decimate.ps1 -Source Motherlode, called from bash" \
+              "exit $rc; $(grep -P '^chain\.' "$SPIKE_OUT/numbers.tsv" | tr '\t' '=' | paste -sd ' ' -)" \
+              "$([ $rc = 0 ] && echo 'none; decimate.ps1/run-all.ps1 themselves would need .venv/bin/python and forward slashes' || echo 'chain failed: see the log')"
+          exit $rc
+
+      - name: Outlines and anchor (outlines-v2, import-motherlode.ps1 under pwsh)
+        if: steps.catalog.outputs.catalog != ''
+        run: |
+          source spike/say.sh
+          CAT="${{ steps.catalog.outputs.catalog }}"; CLS="${{ steps.probe.outputs.cls }}"; SLUG="${{ steps.probe.outputs.slug }}"; ID="${{ steps.probe.outputs.id }}"
+          cp -r app/ships work/ships
+          prev="$PWD/app/outlines/ship-outlines.json"
+          rc1=0; t=$(now)
+          pwsh -NoProfile -File app/tools/import-motherlode.ps1 -Catalog "$CAT" -ShipsFolder "$PWD/work/ships" -Outlines "$prev" \
+               -ModelMap "$PWD/work/model-map.csv" > work/import1.log 2>&1 || rc1=$?
+          num anchor.import1.s "$(since "$t")"; num anchor.import1.rc "$rc1"
+          tail -n 40 work/import1.log | sed 's/^/  /'
+          { echo 'id,className,modelKey,sx,sy,sz'; grep "^$ID,$CLS," work/model-map.csv 2>/dev/null || echo "$ID,$CLS,$SLUG,0,0,0"; } > work/map-one.csv
+          read -r gen dv < <(python -c "import json, sys; d = json.load(open(sys.argv[1])); print(d['generatedAt'], d['dataVersion'])" "$prev")
+          keep=$(python -c "import json, sys; print(' '.join(s['slug'] for s in json.load(open(sys.argv[1]))['ships'] if s['slug'] != sys.argv[2]))" "$prev" "$SLUG")
+          t=$(now)
+          python -I spike/holo_mesh.py outlines-v2 work/map-one.csv "$prev" work/ship-outlines.json "$gen" "$dv" $keep
+          num anchor.outlines-v2.s "$(since "$t")"
+          rc2=0; t=$(now)
+          pwsh -NoProfile -File app/tools/import-motherlode.ps1 -Catalog "$CAT" -ShipsFolder "$PWD/work/ships" -Outlines "$PWD/work/ship-outlines.json" \
+               -ModelMap "$PWD/work/model-map-2.csv" > work/import2.log 2>&1 || rc2=$?
+          num anchor.import2.s "$(since "$t")"; num anchor.import2.rc "$rc2"
+          tail -n 40 work/import2.log | sed 's/^/  /'
+          say "Outlines and anchor" \
+              "import-motherlode.ps1 (v0.5.1) under pwsh on Linux with the fresh catalog: model map, racks; outlines-v2 with only $SLUG rebuilt; import again for the anchor from the new floorM" \
+              "import 1 exit $rc1, import 2 exit $rc2 (0 done, 1 something to look at, 2 error); map row: $(sed -n 2p work/map-one.csv)" \
+              "$([ $rc1 = 2 ] || [ $rc2 = 2 ] && echo 'the import errs on Linux: see the log' || echo 'none; exit 1 lists what a person would look at')"
+
+      - name: Compare with holo-v3 / v0.5.1
+        if: always()
+        run: |
+          SLUG="${{ steps.probe.outputs.slug }}"; ID="${{ steps.probe.outputs.id }}"; CLS="${{ steps.probe.outputs.cls }}"
+          curl -sSL -o work/ref.holo "https://github.com/$APP_REPO/releases/download/$HOLO_TAG/$SLUG.holo"
+          python spike/compare_built.py "$SLUG" "$ID" "$HOLO_WORK/$CLS/PP.holo" work/ref.holo work/holo-v3-manifest.json \
+                 "$HOLO_WORK/$CLS/PP.json" work/ship-outlines.json app/outlines/ship-outlines.json work/ships app/ships
+
+      - name: Collect built data
+        if: always()
+        run: |
+          SLUG="${{ steps.probe.outputs.slug }}"; ID="${{ steps.probe.outputs.id }}"; CLS="${{ steps.probe.outputs.cls }}"
+          mkdir -p built
+          echo "$ID $SLUG $CLS" > built/ship.txt
+          cp "$HOLO_WORK/$CLS/PP.holo" "built/$SLUG.holo" || true
+          cp "$HOLO_WORK/$CLS"/*.json built/ || true
+          cp work/ship-outlines.json "work/ships/$ID.json" work/model-map.csv work/*.log built/ || true
+          ls -l built
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: built
+          path: built
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: numbers-chain
+          path: out
+          retention-days: 7
+
+  gate-a:
+    name: gate-a (windows, v0.5.1 as released)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPIKE_OUT: ${{ github.workspace }}/out
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out the app at its tag
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: ${{ env.APP_TAG }}
+          path: app
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: app/global.json
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14.5'
+
+      - name: Runner, holo releases, build
+        run: |
+          source spike/say.sh
+          seg=$(pwsh -NoProfile -Command "(Get-Item C:\Windows\Fonts\segoeui.ttf).VersionInfo.FileVersion")
+          t=$(now)
+          gh release download "$HOLO_TAG" -R "$APP_REPO" -D holo-v3
+          gh release download holo-v2 -R "$APP_REPO" -D holo-v2
+          num gate.download.s "$(since "$t")"
+          t=$(now)
+          dotnet build app/tests/CargoPlan.App.Tests -c Release > build.log 2>&1 || { tail -n 60 build.log; exit 1; }
+          b=$(since "$t"); num gate.build.s "$b"
+          num runner.image "$ImageOS $ImageVersion"; num runner.segoeui "$seg"; num dotnet "$(dotnet --version)"
+          say "Gate runner (gate-a)" "runner image, Segoe UI, holo-v3 and holo-v2 assets, Release build of CargoPlan.App.Tests at $APP_TAG" \
+              "image $ImageOS $ImageVersion, segoeui.ttf $seg, dotnet $(dotnet --version); holo-v3 $(ls holo-v3 | wc -l) files, holo-v2 $(ls holo-v2 | wc -l) files; build $b s" \
+              "none"
+
+      - name: Run A1 - v0.5.1 with holo-v3, no baseline (every PNG)
+        run: bash spike/pictures.sh a1 holo-v3
+
+      - name: Run A2 - holo-v2 against A1 (the real v2 -> v3 changes, expected to fail)
+        run: |
+          bash spike/pictures.sh a2 holo-v2 pics/a1
+          python spike/csvdiff.py a1-vs-a2 pics/a1 pics/a2
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: a1-csv
+          path: |
+            pics/a1/*.csv
+            pics/a1/*.txt
+            pics/a1.log
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: a1-png
+          path: pics/a1/png
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: a2
+          path: |
+            pics/a2
+            pics/a2.log
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: numbers-gate-a
+          path: out
+          retention-days: 7
+
+  gate-b:
+    name: gate-b (windows, same VM old vs new)
+    needs: [chain, gate-a]
+    if: always() && needs.gate-a.result == 'success'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPIKE_OUT: ${{ github.workspace }}/out
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out the app at its tag
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: ${{ env.APP_TAG }}
+          path: app
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: app/global.json
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14.5'
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: built
+          path: built
+
+      # The artifact keeps the a1/ prefix (common root pics/ of its paths).
+      - uses: actions/download-artifact@v8
+        with:
+          name: a1-csv
+          path: pics
+
+      - name: Runner, holo-v3, build
+        run: |
+          source spike/say.sh
+          t=$(now); gh release download "$HOLO_TAG" -R "$APP_REPO" -D holo-v3; num gate.download.s "$(since "$t")"
+          t=$(now)
+          dotnet build app/tests/CargoPlan.App.Tests -c Release > build.log 2>&1 || { tail -n 60 build.log; exit 1; }
+          b=$(since "$t"); num gate.build.s "$b"
+          num runner.image "$ImageOS $ImageVersion"
+          say "Gate runner (gate-b)" "runner image, holo-v3, Release build at $APP_TAG" "image $ImageOS $ImageVersion; build $b s" "none"
+
+      - name: Run B0 - v0.5.1 as released, no baseline (K1)
+        run: bash spike/pictures.sh b0 holo-v3
+
+      - name: Swap in the built files and rebuild
+        id: swap
+        run: |
+          source spike/say.sh
+          if [ ! -f built/ship.txt ] || [ ! -f "built/$(cut -d' ' -f2 built/ship.txt).holo" ]; then
+            say "Swap built files" "artifact built from the chain job" "missing: the chain did not build" "run B skipped; B0 against A1 still gives VM-to-VM"
+            exit 0
+          fi
+          read -r ID SLUG CLS < built/ship.txt
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          same() { python -c "import sys; n = lambda p: open(p, 'rb').read().replace(b'\r\n', b'\n'); print('same' if n(sys.argv[1]) == n(sys.argv[2]) else 'different')" "$1" "$2"; }
+          s1=$(same "built/$ID.json" "app/ships/$ID.json"); s2=$(same built/ship-outlines.json app/outlines/ship-outlines.json); s3=$(same "built/$SLUG.holo" "holo-v3/$SLUG.holo")
+          t=$(now)
+          cp "built/$ID.json" "app/ships/$ID.json"
+          cp built/ship-outlines.json app/outlines/ship-outlines.json
+          cp "built/$SLUG.holo" "holo-v3/$SLUG.holo"
+          dotnet build app/tests/CargoPlan.App.Tests -c Release > rebuild.log 2>&1 || { tail -n 60 rebuild.log; exit 1; }
+          s=$(since "$t"); num gate.swap-rebuild.s "$s"
+          say "Swap built files into the app checkout (E3)" "ships/$ID.json, outlines/ship-outlines.json, $SLUG.holo from the ubuntu chain; rebuild, since ships/ and outlines/ are copied to bin" \
+              "ship json $s1, outlines $s2, holo $s3 (against v0.5.1/holo-v3); swap + rebuild $s s" \
+              "none; E3 decides whether the test gets a data-folder override instead"
+
+      - name: Run B - built files, baseline B0, expected the spike ship
+        if: steps.swap.outputs.id != ''
+        run: bash spike/pictures.sh b holo-v3 pics/b0 "${{ steps.swap.outputs.id }}"
+
+      - name: Hash comparisons (K1 same VM, VM to VM)
+        if: always()
+        run: |
+          ID="${{ steps.swap.outputs.id }}"
+          if [ -n "$ID" ]; then
+            python spike/csvdiff.py b0-vs-b pics/b0 pics/b "$ID"
+            python spike/csvdiff.py a1-vs-b pics/a1 pics/b "$ID"
+          fi
+          python spike/csvdiff.py a1-vs-b0 pics/a1 pics/b0
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: b0
+          path: |
+            pics/b0
+            pics/b0.log
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: b
+          path: |
+            pics/b
+            pics/b.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: numbers-gate-b
+          path: out
+          retention-days: 7

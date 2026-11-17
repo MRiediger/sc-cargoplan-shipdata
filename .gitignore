@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Pipeline caches and work folders
+cache/
+work/
+built/
+pics/
+out/
+
+# Models, intermediates, pictures, documents
+*.glb
+*.gltf
+*.npz
+*.idx
+*.bin
+*.holo
+*.png
+*.pdf
