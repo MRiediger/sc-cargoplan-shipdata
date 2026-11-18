@@ -1,10 +1,11 @@
 """The five stages of run.py and what they hand on (all under <root>/work, numbers under <root>/out):
 
   fetch    -> work/catalog.json, work/fetch.json, cache/models/*.glb
-  diff     -> work/ships/ (import, first run), work/import-1.json, work/model-map-1.csv, work/diff.json
+  diff     -> work/previous/ (the last release's ships.zip), work/ships/ (import, first run), work/import-1.json,
+              work/model-map-1.csv, work/previous-order.json, work/diff.json
   build    -> work/holo/<className>/PP.holo..., work/outlines.json, work/import-2.json (anchors), work/build.json
-  verify   -> work/stage/ (the release folder with manifest.json), work/verify.json, work/overrides-proposed.json
-  release  -> out/release/ (--dry-run) or out/seed/ (--seed)
+  verify   -> work/stage/ (ships/, outlines.json, <slug>.holo, manifest.json), work/verify.json, work/overrides-proposed.json
+  release  -> out/release/ (--dry-run) or out/seed/ (--seed): the flat assets manifest.json, NOTICE.md, ships.zip, <slug>.holo
 
 Exit codes: 0 done, 1 error, 2 a rule fired (PR path). Every stage ends with checked / found / to do."""
 import csv
@@ -113,15 +114,16 @@ def fetch_stage(p: Paths, log: Reporter, saved: Path | None, catalog_only: bool)
 # ---------------------------------------------------------------- diff
 
 def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
-    m = manifest.read(previous / 'manifest.json')
+    data = p.w('previous')
+    m = release.unpack(previous, data)          # manifest.json + ships.zip, checked; the holograms are not needed here
     catalog = load_json(p.w('catalog.json'))
     order = p.w('previous-order.json')
     save_json(order, diff.order_map(m))
     ships = p.w('ships')
     if ships.exists():
         shutil.rmtree(ships)
-    shutil.copytree(previous / 'ships', ships)
-    r = importer.run_import(p.w('catalog.json'), ships, previous / 'outlines.json', p.w('model-map-1.csv'), p.w('import-1.json'),
+    shutil.copytree(data / 'ships', ships)
+    r = importer.run_import(p.w('catalog.json'), ships, data / 'outlines.json', p.w('model-map-1.csv'), p.w('import-1.json'),
                             key_map(m), create=True, previous_order=order)
     absent = [e['id'] for e in r.entries if e['status'] == 'absent']
     # Written from the catalog now, but the last release has no order for them (seed: not in the archive): not compared.
@@ -129,12 +131,13 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
                        and m['ships'][e['id']].get('orderKeys') is None)
     compared = sum(1 for e in r.entries if e['status'] in ('same', 'updated', 'created', 'order') and e['id'] in m['ships']
                    and e['id'] not in unchecked)
-    changes = diff.compare_ships(previous / 'ships', ships, absent)
+    changes = diff.compare_ships(data / 'ships', ships, absent)
     chosen = set(holo_mesh.slug_models(holo_mesh.read_map(str(p.w('model-map-1.csv'))))[0].values())
     models = diff.model_changes((m.get('holo') or {}).get('ships') or {}, catalog, chosen)
     status = {s: sum(1 for e in r.entries if e['status'] == s) for s in sorted({e['status'] for e in r.entries})}
     nothing = not (changes.changed or changes.new or changes.gone or models.changed or models.new)
-    save_json(p.w('diff.json'), {'previous': str(previous.resolve()), 'previousDataVersion': m['dataVersion'],
+    save_json(p.w('diff.json'), {'previous': str(previous.resolve()), 'previousData': str(data.resolve()),
+                                 'previousDataVersion': m['dataVersion'],
                                  'order': {'compared': compared, 'changed': sorted(e['id'] for e in r.entries if e['status'] == 'order')},
                                  'orderNotCompared': unchecked, 'ships': asdict(changes), 'models': asdict(models), 'import': {'rc': r.rc, 'status': status},
                                  'nothingChanged': nothing})
@@ -144,7 +147,7 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
         log.num(f'diff.models.{k}', len(getattr(models, k)))
     show = lambda xs: ', '.join(xs[:10]) + ('...' if len(xs) > 10 else '')
     log.say('diff', f"catalog {catalog['gameBuild']} ({catalog['updatedAt']}) against release {m['dataVersion']}: "
-            f"{len(list((previous / 'ships').glob('*.json')))} ship files without stamps, {len(models.same) + len(models.changed) + len(models.without_url)} models"
+            f"manifest.json and {m['assets']['ships']} checked, {len(list((data / 'ships').glob('*.json')))} ship files without stamps, {len(models.same) + len(models.changed) + len(models.without_url)} models"
             + "; grid order against the release's orderKeys",
             f"ships: {len(changes.changed)} changed ({show(changes.changed)}), {len(changes.new)} new ({show(changes.new)}), "
             f"{len(changes.gone)} gone ({show(changes.gone)}), {len(changes.same)} same; models: {len(models.changed)} changed "
@@ -203,9 +206,10 @@ def build_stage(p: Paths, log: Reporter, ship_ids: list[str], build_all: bool, d
         for row in csv.DictReader(p.w('model-map-1.csv').open(encoding='utf-8', newline='')):
             if row['modelKey'] in built:
                 w.writerow([row[k] for k in ('id', 'className', 'modelKey', 'sx', 'sy', 'sz')])
-    prev_slugs = [s['slug'] for s in load_json(previous / 'outlines.json')['ships']]
+    prev_data = Path(d['previousData'])
+    prev_slugs = [s['slug'] for s in load_json(prev_data / 'outlines.json')['ships']]
     keep = [s for s in prev_slugs if s not in built]
-    subprocess.run([sys.executable, '-I', str(chain.MESH), 'outlines-v2', str(built_map), str(previous / 'outlines.json'),
+    subprocess.run([sys.executable, '-I', str(chain.MESH), 'outlines-v2', str(built_map), str(prev_data / 'outlines.json'),
                     str(p.w('outlines.json')), generated_at, data_version, *keep], check=True,
                    env=dict(os.environ, HOLO_WORK=str(holo_work)), stdout=subprocess.DEVNULL)
     # Anchors: the import once more, now with the new models' floors.
@@ -307,26 +311,28 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
         (stage / 'ships' / f'{sid}.json').write_text(text, encoding='utf-8', newline='\n')
     shutil.copyfile(p.w('outlines.json'), stage / 'outlines.json')
 
-    # Holograms: rebuilt ones from work/holo, every other one of the last release byte for byte.
-    (stage / 'holo').mkdir()
+    # Holograms (flat, SD4): rebuilt ones from work/holo, every other one of the last release byte for byte.
     prev_holo = (m.get('holo') or {}).get('ships') or {}
     holo_ships: dict[str, dict] = {}
     same_bytes = 0
     for slug, info in sorted(b['built'].items()):
         work = p.w('holo') / info['className']
         pp, flat = load_json(work / 'PP.json'), load_json(work / 'flat.json')
-        shutil.copyfile(work / 'PP.holo', stage / 'holo' / f'{slug}.holo')
+        shutil.copyfile(work / 'PP.holo', stage / f'{slug}.holo')
         holo_ships[slug] = {'model': info['className'], 'rawSha256': flat['rawSha256'], 'budget': pp['budget'],
                             'triangles': pp['triangles'], 'edges': pp['edges'], 'passed': pp['passed'], 'fails': pp['fails'],
                             'metrics': {k: pp[k] for k in holo_mesh.METRIC_KEYS}}
         f = rules.judge(slug, pp, prev_holo.get(slug), info['className'])
         if f:
             findings.append(f)
-        if slug in prev_holo and manifest.sha256(stage / 'holo' / f'{slug}.holo') == prev_holo[slug]['sha256']:
+        if slug in prev_holo and manifest.sha256(stage / f'{slug}.holo') == prev_holo[slug]['sha256']:
             same_bytes += 1
     for slug, e in sorted(prev_holo.items()):
         if slug not in holo_ships:
-            shutil.copyfile(previous / e['file'], stage / 'holo' / f'{slug}.holo')
+            if not (previous / e['file']).exists():
+                raise FileNotFoundError(f"{previous / e['file']} is missing: verify needs every hologram asset of the last "
+                                        'release (the unchanged ones go into the new release byte for byte)')
+            shutil.copyfile(previous / e['file'], stage / f'{slug}.holo')
             holo_ships[slug] = {k: v for k, v in e.items() if k not in ('file', 'bytes', 'sha256')}
 
     # orderKeys: the catalog's for a ship written from it in this run, otherwise the last release's (gone, kept, order).
@@ -385,17 +391,18 @@ def release_stage(p: Paths, log: Reporter, dry_run: bool) -> int:
         raise release.ReleaseError(f'stage differs from its manifest: {problems[:5]}')
     if not dry_run:
         release.publish(stage, p.models)
-    assets = release.dry_run(stage, p.out / 'release', p.root / 'NOTICE.md')
-    total = sum(a.bytes for a in assets)
-    groups: dict[str, list] = {}
+    assets = release.pack(stage, p.out / 'release', p.root / 'NOTICE.md')
+    total, holos = sum(a.bytes for a in assets), [a for a in assets if a.name.endswith('.holo')]
     for a in assets:
-        groups.setdefault(a.name.split('/')[0] if '/' in a.name else a.name, []).append(a)
-    for g, items in sorted(groups.items()):
-        log.line(f'{g:<16} {len(items):>4} files {sum(a.bytes for a in items):>10} bytes')
+        if not a.name.endswith('.holo'):
+            log.line(f'{a.name:<16} {a.bytes:>10} bytes')
+    log.line(f"{f'{len(holos)} x .holo':<16} {sum(a.bytes for a in holos):>10} bytes")
     log.num('release.assets', len(assets))
+    log.num('release.holo', len(holos))
     log.num('release.bytes', total)
-    log.say('release --dry-run', f"stage of {m['dataVersion']} against its manifest, copied to {p.out / 'release'} with NOTICE.md",
-            f'{len(assets)} files, {total} bytes; nothing uploaded, the model cache untouched',
+    log.say('release --dry-run', f"stage of {m['dataVersion']} against its manifest, packed to {p.out / 'release'} with NOTICE.md",
+            f"{len(assets)} assets, {total} bytes: manifest.json, NOTICE.md, {m['assets']['ships']}, {len(holos)} x .holo; "
+            'nothing uploaded, the model cache untouched',
             'none (publishing comes with T12.2)')
     return 0
 
@@ -413,17 +420,19 @@ def seed_stage(p: Paths, log: Reporter, app: Path, holo: Path, catalog_raw: Path
     r = importer.run_import(p.w('seed-catalog.json'), ships, app / 'outlines' / 'ship-outlines.json', p.w('seed-map.csv'),
                             p.w('seed-import.json'), {}, create=False)
     keys, unchecked = release.seed_order_keys(r.entries, [q.stem for q in sorted((app / 'ships').glob('*.json'))])
-    s = release.seed(app, holo, out, app_tag=app_tag, data_version=data_version, generated_at=generated_at,
+    s = release.seed(app, holo, p.w('seed-stage'), app_tag=app_tag, data_version=data_version, generated_at=generated_at,
                      pipeline_commit=pipeline_commit(), tools=tool_versions(), order_keys=keys)
+    assets = release.pack(s.folder, out, p.root / 'NOTICE.md')
     log.num('seed.ships', s.ships)
     log.num('seed.holos', s.holos)
     log.num('seed.orderKeys', len(keys) - len(unchecked))
+    log.num('seed.assets', len(assets))
     log.say('release --seed', f'{app} (ships/, outlines/), {holo} (holograms, manifest) and the catalog {catalog_raw} '
             f'(grid order) into {out}',
             f"{s.ships} ship files, {s.holos} holograms; built from {s.motherlode['gameBuild']}, {s.motherlode['updatedAt']}; "
             f"{len(s.other_sources)} ships of another source: {', '.join(f'{k} ({v})' for k, v in s.other_sources.items())}; "
             f"orderKeys from {cat['gameBuild']} ({cat['updatedAt']}) for {len(keys) - len(unchecked)} ships, "
-            f"order not compared for {len(unchecked)} ({', '.join(unchecked)})",
+            f"order not compared for {len(unchecked)} ({', '.join(unchecked)}); {len(assets)} assets",
             f'none: {out} is the last release for diff --previous')
     return 0
 

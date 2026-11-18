@@ -19,8 +19,7 @@ def stage(tmp: Path, with_holo: bool = True) -> Path:
     (s / 'ships' / 'alpha.json').write_text(json.dumps(SHIP), encoding='utf-8')
     (s / 'outlines.json').write_text('{"schemaVersion":1,"ships":[]}', encoding='utf-8')
     if with_holo:
-        (s / 'holo').mkdir()
-        (s / 'holo' / 'test-alpha.holo').write_bytes(b'SCH2 bytes')
+        (s / 'test-alpha.holo').write_bytes(b'SCH2 bytes')        # flat, as the asset (SD4)
     return s
 
 
@@ -36,6 +35,8 @@ def test_the_manifest_hashes_every_file_and_checks_clean(tmp_path: Path) -> None
     m = build(s, HOLO)
     assert sorted(m['files']) == ['outlines.json', 'ships/alpha.json']
     assert m['holo']['ships']['test-alpha']['bytes'] == len(b'SCH2 bytes')
+    assert m['holo']['ships']['test-alpha']['file'] == 'test-alpha.holo'
+    assert m['assets'] == {'ships': 'ships.zip'}
     assert m['ships']['alpha']['modelKey'] == 'test-alpha' and len(m['ships']['alpha']['racksSha256']) == 64
     assert manifest.check(s, m) == []
 
@@ -67,6 +68,11 @@ def test_reading_checks_the_required_fields(tmp_path: Path) -> None:
     del m['ships']
     (s / 'manifest.json').write_text(json.dumps(m), encoding='utf-8')
     with pytest.raises(manifest.ManifestError, match='ships'):
+        manifest.read(s / 'manifest.json')
+    m = build(s, HOLO)
+    del m['assets']
+    (s / 'manifest.json').write_text(json.dumps(m), encoding='utf-8')
+    with pytest.raises(manifest.ManifestError, match='assets'):
         manifest.read(s / 'manifest.json')
 
 

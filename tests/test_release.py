@@ -2,6 +2,8 @@
 assets and never touches the model cache; cleaning old model hashes belongs to a published release (condition B)."""
 import hashlib
 import json
+import os
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -51,7 +53,8 @@ def test_seed_reads_built_from_out_of_the_source_lines(tmp_path: Path) -> None:
                                  'f7c': 'Fleetyards API (CIG ship matrix), export 2026-01-15'}
     assert (out.folder / 'ships' / 'a.json').read_bytes() == (tmp_path / 'app' / 'ships' / 'a.json').read_bytes()
     assert (out.folder / 'ships' / 'modules' / 'm.json').exists()
-    assert (out.folder / 'outlines.json').exists() and (out.folder / 'holo' / 'test-a.holo').exists()
+    assert (out.folder / 'outlines.json').exists() and (out.folder / 'test-a.holo').exists()
+    assert not (out.folder / 'holo').exists()
     assert sorted(m['holo']['ships']) == ['test-a']
 
 
@@ -120,16 +123,74 @@ def test_seed_order_keys_stop_when_the_archive_would_rewrite_a_ship() -> None:
                                 ['a', 'b'])
 
 
-def test_dry_run_lists_the_assets_and_leaves_the_model_cache_alone(tmp_path: Path) -> None:
-    out = release.seed(app(tmp_path, {'a': MOTHERLODE}), holo(tmp_path, ['test-a']), tmp_path / 'stage', app_tag='v0.5.1',
-                       data_version='ships-2026.11', generated_at='x', pipeline_commit='x', tools={})
+def staged(tmp: Path) -> Path:
+    return release.seed(app(tmp, {'a': MOTHERLODE, 'b': MOTHERLODE}), holo(tmp, ['test-a', 'test-b']), tmp / 'stage',
+                        app_tag='v0.5.1', data_version='ships-2026.11', generated_at='x', pipeline_commit='x', tools={}).folder
+
+
+def test_pack_writes_exactly_the_flat_assets_and_leaves_the_model_cache_alone(tmp_path: Path) -> None:
+    """SD4: manifest.json, NOTICE.md, ships.zip (ships/** + outlines.json) and one <slug>.holo per hologram, nothing else."""
+    stage = staged(tmp_path)
     models = tmp_path / 'models'
     models.mkdir()
     (models / 'TEST_A-000000000000.glb').write_bytes(b'old')
     (models / 'TEST_A-111111111111.glb').write_bytes(b'new')
-    assets = release.dry_run(out.folder, tmp_path / 'release', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
-    assert {'manifest.json', 'NOTICE.md', 'outlines.json', 'ships/a.json', 'holo/test-a.holo'} <= {a.name for a in assets}
+    assets = release.pack(stage, tmp_path / 'release', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
+    assert sorted(a.name for a in assets) == ['NOTICE.md', 'manifest.json', 'ships.zip', 'test-a.holo', 'test-b.holo']
+    assert sorted(p.name for p in (tmp_path / 'release').iterdir()) == sorted(a.name for a in assets)
+    m = json.loads((tmp_path / 'release' / 'manifest.json').read_text(encoding='utf-8'))
+    with zipfile.ZipFile(tmp_path / 'release' / 'ships.zip') as z:
+        assert z.namelist() == sorted(m['files'])
+        assert all(hashlib.sha256(z.read(n)).hexdigest() == m['files'][n] for n in z.namelist())
     assert len(list(models.iterdir())) == 2
+
+
+def test_ships_zip_is_the_same_bytes_for_the_same_content(tmp_path: Path) -> None:
+    stage = staged(tmp_path)
+    release.pack(stage, tmp_path / 'one', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
+    # Another mtime, the same bytes. Far apart: ZIP keeps times in 2-second steps, so a touch() alone would not show a
+    # time in the entries (it kept this test green when provoked, T12.1b).
+    os.utime(stage / 'ships' / 'a.json', (1_000_000_000, 1_000_000_000))
+    release.pack(stage, tmp_path / 'two', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
+    assert (tmp_path / 'one' / 'ships.zip').read_bytes() == (tmp_path / 'two' / 'ships.zip').read_bytes()
+
+
+def test_unpack_reads_manifest_and_zip_without_holograms(tmp_path: Path) -> None:
+    """diff --previous needs only manifest.json and ships.zip of the last release (SD4)."""
+    release.pack(staged(tmp_path), tmp_path / 'release', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
+    for h in (tmp_path / 'release').glob('*.holo'):
+        h.unlink()
+    m = release.unpack(tmp_path / 'release', tmp_path / 'previous')
+    assert m['dataVersion'] == 'ships-2026.11'
+    assert sorted(p.relative_to(tmp_path / 'previous').as_posix() for p in (tmp_path / 'previous').rglob('*') if p.is_file()) \
+        == sorted(m['files'])
+
+
+def rezip(path: Path, entries: dict[str, bytes]) -> None:
+    with zipfile.ZipFile(path, 'w') as z:
+        for name, data in entries.items():
+            z.writestr(name, data)
+
+
+def test_unpack_stops_on_an_entry_that_differs_from_the_manifest(tmp_path: Path) -> None:
+    release.pack(staged(tmp_path), tmp_path / 'release', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
+    with zipfile.ZipFile(tmp_path / 'release' / 'ships.zip') as z:
+        entries = {n: z.read(n) for n in z.namelist()}
+    entries['ships/a.json'] = b'{}'
+    rezip(tmp_path / 'release' / 'ships.zip', entries)
+    with pytest.raises(release.ReleaseError, match='ships/a.json'):
+        release.unpack(tmp_path / 'release', tmp_path / 'previous')
+
+
+def test_unpack_stops_on_a_path_outside_the_folder(tmp_path: Path) -> None:
+    release.pack(staged(tmp_path), tmp_path / 'release', notice=tmp_path / 'holo-v3' / 'NOTICE.md')
+    with zipfile.ZipFile(tmp_path / 'release' / 'ships.zip') as z:
+        entries = {n: z.read(n) for n in z.namelist()}
+    entries['ships/../../escape.json'] = b'{}'
+    rezip(tmp_path / 'release' / 'ships.zip', entries)
+    with pytest.raises(release.ReleaseError, match='escape'):
+        release.unpack(tmp_path / 'release', tmp_path / 'previous')
+    assert not (tmp_path / 'escape.json').exists()
 
 
 def test_publishing_is_part_of_t12_2(tmp_path: Path) -> None:

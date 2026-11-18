@@ -1,16 +1,20 @@
-"""release: the release folder (ships/, outlines.json, holo/, manifest.json, NOTICE.md) and its asset list.
+"""release: the staged folder (ships/, outlines.json, <slug>.holo, manifest.json) packed as the flat assets of a data
+release (SD4): manifest.json, NOTICE.md, ships.zip (ships/** + outlines.json) and one <slug>.holo per hologram - GitHub
+assets cannot be folders. unpack reads a last release's manifest and ships.zip for diff, without its holograms.
 
---seed (plan P4) builds the first folder without a catalog, from the app's data and a hologram release - today
+--seed (plan P4) builds the first stage without a run, from the app's data and a hologram release - today
 sc-cargoplan@v0.5.1 and holo-v3 - so diff has a last release to compare with, and T12.6 has its first data release.
 builtFrom.motherlode comes from the ships' "source" lines (condition D); the hologram entries, passed=false included, come
-over unchanged (P9), so the first run's judge sees them as published.
---dry-run copies the staged folder and lists the assets; it never touches the model cache. Publishing, and with it
-cleaning older model hashes (condition B, fetch.prune_models), comes with the workflow in T12.2."""
+over with fails derived from their metrics (F1), the orderKeys from the catalog the app's data was built from.
+--dry-run packs the stage and lists the assets; it never touches the model cache. Publishing, and with it cleaning older
+model hashes (condition B, fetch.prune_models), comes with the workflow in T12.2."""
 import hashlib
 import json
 import re
 import shutil
 import sys
+import zipfile
+from pathlib import PurePosixPath
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -95,13 +99,12 @@ def seed(app: Path, holo_dir: Path, out: Path, *, app_tag: str, data_version: st
     shutil.copytree(app / 'ships', out / 'ships')
     shutil.copyfile(app / 'outlines' / 'ship-outlines.json', out / 'outlines.json')
     holo_manifest = json.loads((holo_dir / 'manifest.json').read_text(encoding='utf-8-sig'))
-    (out / 'holo').mkdir()
     holo_ships = {}
     for e in holo_manifest['ships']:
         data = (holo_dir / e['file']).read_bytes()
         if len(data) != e['bytes'] or hashlib.sha256(data).hexdigest() != e['sha256']:
             raise ReleaseError(f"{e['slug']}: {e['file']} differs from the holo release's manifest")
-        (out / 'holo' / f"{e['slug']}.holo").write_bytes(data)
+        (out / f"{e['slug']}.holo").write_bytes(data)
         holo_ships[e['slug']] = dict({k: v for k, v in e.items() if k not in ('slug', 'file', 'bytes', 'sha256')},
                                      fails=derived_fails(e))
     sources = {p.stem: json.loads(p.read_text(encoding='utf-8-sig')).get('source') for p in sorted((out / 'ships').glob('*.json'))}
@@ -118,12 +121,56 @@ def assets(folder: Path) -> list[Asset]:
             for p in sorted(folder.rglob('*')) if p.is_file()]
 
 
-def dry_run(stage: Path, release_dir: Path, notice: Path) -> list[Asset]:
+ZIP_TIME = (1980, 1, 1, 0, 0, 0)    # the earliest time a ZIP entry can carry: the same content gives the same bytes
+
+
+def pack(stage: Path, release_dir: Path, notice: Path) -> list[Asset]:
+    """The release assets from a stage checked against its manifest: ships.zip with exactly the files of `files` (sorted,
+    fixed time and mode, deflated; Python docs, zipfile.ZipInfo and ZipFile.writestr), the holograms and the manifest byte
+    for byte, NOTICE.md from the repo. Nothing else lands in the folder."""
+    m = manifest.read(stage / 'manifest.json')
+    problems = manifest.check(stage, m)
+    if problems:
+        raise ReleaseError(f'stage differs from its manifest: {problems[:5]}')
     if release_dir.exists():
         shutil.rmtree(release_dir)
-    shutil.copytree(stage, release_dir)
+    release_dir.mkdir(parents=True)
+    with zipfile.ZipFile(release_dir / m['assets']['ships'], 'w') as z:
+        for rel in sorted(m['files']):
+            info = zipfile.ZipInfo(rel, date_time=ZIP_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            z.writestr(info, (stage / rel).read_bytes())
+    for e in ((m['holo'] or {}).get('ships') or {}).values():
+        shutil.copyfile(stage / e['file'], release_dir / e['file'])
     shutil.copyfile(notice, release_dir / 'NOTICE.md')
+    shutil.copyfile(stage / 'manifest.json', release_dir / 'manifest.json')
     return assets(release_dir)
+
+
+def unpack(release_dir: Path, into: Path) -> dict:
+    """A last release for diff (SD4): its manifest and ships.zip, the holograms are not needed. At the boundary: every
+    entry is ships/... or outlines.json inside `into` (no absolute path, no ..), and every unpacked file matches `files`."""
+    m = manifest.read(release_dir / 'manifest.json')
+    archive = release_dir / m['assets']['ships']
+    if not archive.exists():
+        raise ReleaseError(f'{archive} is missing: diff needs manifest.json and {m["assets"]["ships"]} of the last release')
+    if into.exists():
+        shutil.rmtree(into)
+    into.mkdir(parents=True)
+    with zipfile.ZipFile(archive) as z:
+        for info in z.infolist():
+            parts = PurePosixPath(info.filename).parts
+            if info.is_dir() or info.filename.startswith('/') or '..' in parts or '\\' in info.filename or not (
+                    info.filename == 'outlines.json' or (parts[0] == 'ships' and len(parts) > 1)):
+                raise ReleaseError(f'{archive}: entry {info.filename!r} is not ships/... or outlines.json')
+            target = into.joinpath(*parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(z.read(info))
+    problems = manifest.check(into, m, holograms=False)
+    if problems:
+        raise ReleaseError(f'{archive} differs from its manifest: {problems[:5]}')
+    return m
 
 
 def publish(stage: Path, models_dir: Path) -> None:

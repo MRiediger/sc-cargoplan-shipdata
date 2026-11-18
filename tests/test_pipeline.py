@@ -76,10 +76,23 @@ def test_a_catalog_without_changes_but_a_gone_ship_releases_with_missing_since(t
     m = json.loads((root / 'out' / 'release' / 'manifest.json').read_text(encoding='utf-8'))
     assert m['ships']['gone']['missingSince'] == '2026-11-17'
     assert m['builtFrom']['motherlode']['gameBuild'] == '4.10.3-LIVE.13165946'
-    # Nothing changed but the gone ship's state: every ship file and the outlines byte-equal to the seed.
-    for rel in ('ships/alpha.json', 'ships/gone.json', 'outlines.json', 'holo/test-a.holo'):
-        assert (root / 'out' / 'release' / rel).read_bytes() == (tmp_path / 'seed' / rel).read_bytes(), rel
-    assert (root / 'out' / 'release' / 'NOTICE.md').read_text(encoding='utf-8') == 'data notice'
+    # Nothing changed but the gone ship's state: ships.zip (every ship file and the outlines) and the holograms are the
+    # seed's bytes; the release folder holds the flat assets only (SD4).
+    rel = root / 'out' / 'release'
+    assert sorted(q.name for q in rel.iterdir()) == ['NOTICE.md', 'manifest.json', 'ships.zip', 'test-a.holo', 'test-gone.holo']
+    for name in ('ships.zip', 'test-a.holo', 'test-gone.holo'):
+        assert (rel / name).read_bytes() == (tmp_path / 'seed' / name).read_bytes(), name
+    assert (rel / 'NOTICE.md').read_text(encoding='utf-8') == 'data notice'
+
+    # diff --previous reads manifest.json and ships.zip only: the same numbers without the holograms.
+    bare = tmp_path / 'bare'
+    bare.mkdir()
+    for name in ('manifest.json', 'ships.zip'):
+        (bare / name).write_bytes((rel / name).read_bytes())
+    r = run(root, 'diff', '--previous', str(bare))
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-3000:]
+    d = json.loads((root / 'work' / 'diff.json').read_text(encoding='utf-8'))
+    assert (d['ships']['changed'], d['ships']['new'], d['ships']['gone'], d['ships']['same']) == ([], [], ['gone'], ['alpha'])
 
 
 @needs_pwsh
