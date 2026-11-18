@@ -9,6 +9,8 @@
   python -I tools/run.py release --seed --app <sc-cargoplan> --holo <holo release dir> --catalog <raw dir> [--out <dir>]
   python -I tools/run.py draft [--folder <release dir>] [--target SHA]  the draft release, manifest.json uploaded last
   python -I tools/run.py publish (--tag T | --pending state/pending.json) [--target SHA]
+  python -I tools/run.py pr --tag T [--dry-run]                     PR data/YYYY.MM with state/pending.json (merge = release)
+  python -I tools/run.py heartbeat                                  state/last-run.json + commit (NEEDS = toJSON(needs))
 
 Stages hand on through <root>/work (see shipdata/stages.py). Exit codes: 0 done, 1 error, 2 a rule fired (PR path).
 Every stage ends with checked / found / to do on the screen and in $GITHUB_STEP_SUMMARY."""
@@ -30,6 +32,16 @@ from shipdata.log import Reporter  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 # The app the gate renders with. One machine-readable source per pin (SD8): tools/pins.json; TOOLS.md is the copy.
 APP_TAG: str = json.loads((ROOT / 'tools' / 'pins.json').read_text(encoding='utf-8'))['appTag']
+
+
+def run_id() -> str:
+    return os.environ.get('GITHUB_RUN_ID', 'local')
+
+
+def run_url() -> str:
+    """The run's page (Actions sets GITHUB_SERVER_URL, GITHUB_REPOSITORY and GITHUB_RUN_ID); '-' locally."""
+    e = os.environ
+    return f"{e['GITHUB_SERVER_URL']}/{e['GITHUB_REPOSITORY']}/actions/runs/{e['GITHUB_RUN_ID']}" if 'GITHUB_RUN_ID' in e else '-'
 
 
 def head() -> str:
@@ -77,6 +89,11 @@ def main(argv: list[str]) -> int:
     which.add_argument('--tag')
     which.add_argument('--pending', type=Path, help='state/pending.json of a merged PR (P6)')
     pb.add_argument('--target', default=None, help='commit of the release (default GITHUB_SHA, else HEAD)')
+    pr = sub.add_parser('pr')
+    pr.add_argument('--tag', required=True, help='the draft release the PR names')
+    pr.add_argument('--dry-run', action='store_true', help='write out/pr-body.md only: no git, no gh')
+    hb = sub.add_parser('heartbeat')
+    hb.add_argument('--today', default=dt.date.today().isoformat())
     a = ap.parse_args(argv)
 
     p = stages.Paths(a.root.resolve())
@@ -90,6 +107,11 @@ def main(argv: list[str]) -> int:
             return workflow.draft_stage(p, log, a.folder, a.target or head())
         if a.cmd == 'publish':
             return workflow.publish_stage(p, log, a.tag, a.pending, a.target or head())
+        if a.cmd == 'pr':
+            return workflow.pr_stage(p, log, a.tag, run_id(), run_url(), a.dry_run)
+        if a.cmd == 'heartbeat':
+            return workflow.heartbeat_stage(p, log, json.loads(os.environ.get('NEEDS') or '{}'),
+                                            os.environ.get('GITHUB_EVENT_NAME', 'local'), run_id(), run_url(), a.today)
         if a.cmd == 'diff':
             return stages.diff_stage(p, log, a.previous)
         if a.cmd == 'build':

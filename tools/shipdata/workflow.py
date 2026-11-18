@@ -237,6 +237,7 @@ def publish_stage(p, log: Reporter, tag: str | None, pending: Path | None, targe
     gone = to_delete(releases())
     for t in gone:
         github.gh('release', 'delete', t, '--cleanup-tag', '--yes')
+    superseded = close_superseded(f'release {tag}', None)
     keep = model_files(m)
     removed = fetch.prune_models(p.models, keep) if p.models.exists() else []
     cache = sum(q.stat().st_size for q in p.models.glob('*.glb')) if p.models.exists() else 0
@@ -247,6 +248,256 @@ def publish_stage(p, log: Reporter, tag: str | None, pending: Path | None, targe
             + (' and state/pending.json' if doc else ''),
             f'published {tag} as latest (target {target[:12]}); {len(sheets)} contact sheets removed; '
             f"{len(gone)} old releases deleted ({', '.join(gone) or '-'}); model cache: {len(removed)} older hashes removed, "
-            f'{cache} bytes left',
+            f'{cache} bytes left; {len(superseded)} open data PRs closed as superseded',
             'none')
+    return 0
+
+
+# ---------------------------------------------------------------- the outcome of a run (SD11) and its one line
+
+JOBS = ('chain', 'gate', 'publish', 'pr', 'publish-merged', 'heartbeat', 'local')
+SD5 = {1: 'passed turns false', 2: 'above 110 % of its budget', 3: 'Hausdorff worse by more than the tolerance',
+       4: 'no comparable hologram (new ship or new source)', 5: 'fails another metric'}
+GRID_RULES = ('order', 'overlap', 'handcheck', 'no-transform')
+BOT = ('-c', 'user.name=github-actions[bot]', '-c', 'user.email=41898282+github-actions[bot]@users.noreply.github.com')
+
+
+def plural(n: int, word: str) -> str:
+    return f'{n} {word}' + ('' if n == 1 else 's')
+
+
+def counts(d: dict, v: dict) -> dict:
+    """The numbers of a run's one line, from diff.json and verify.json: holos refreshed = rebuilt and not byte-equal."""
+    holo = v.get('holo') or {}
+    return {'changed': len(d['ships']['changed']), 'new': len(d['ships']['new']), 'gone': len(d['ships']['gone']),
+            'holosRefreshed': holo.get('built', 0) - holo.get('byteEqualToPrevious', 0),
+            'findings': sum(1 for f in v['findings'] if f['stop'])}
+
+
+def summary_line(result: str, *, tag: str | None = None, counts: dict | None = None, pr: object = None,
+                 unexpected: list[str] | None = None, error: str | None = None) -> str:
+    """The line Martin reads without the log (SD11): in the heartbeat's summary, state/last-run.json and the commit."""
+    c = counts or {}
+    if result == 'release':
+        return (f"Release {tag}: {plural(c.get('changed', 0), 'ship')} changed, {c.get('new', 0)} new"
+                + (f", {c['gone']} gone" if c.get('gone') else '') + f", {plural(c.get('holosRefreshed', 0), 'holo')} refreshed")
+    if result == 'pr':
+        return f"PR #{pr}: {plural(c.get('findings', 0), 'finding')}"
+    if result == 'nothing':
+        return 'nothing changed'
+    if result == 'gate-red':
+        u = unexpected or []
+        return f"gate red: {plural(len(u), 'ship')} differ unexpectedly ({', '.join(u[:10])}{'...' if len(u) > 10 else ''})"
+    return f'error {error}'
+
+
+def outcome(needs: dict, event: str) -> dict:
+    """What a run ended with, from the jobs' results and outputs (toJSON(needs)): nothing, release, pr, or red -
+    gate-red or error (SD11). `job` names the job that failed."""
+    def res(j: str) -> str | None:
+        return (needs.get(j) or {}).get('result')
+
+    def out(j: str) -> dict:
+        return (needs.get(j) or {}).get('outputs') or {}
+
+    if event == 'push':
+        if res('publish-merged') == 'success':
+            return {'result': 'release', 'tag': out('publish-merged').get('published'), 'merged': True}
+        return {'result': 'error', 'job': 'publish-merged'}
+    chain = out('chain')
+    if res('chain') != 'success':
+        return {'result': 'error', 'job': 'chain'}
+    if chain.get('changed') == 'false':
+        return {'result': 'nothing'}
+    if res('gate') != 'success':
+        return {'result': 'gate-red' if res('gate') == 'failure' else 'error', 'job': 'gate', 'tag': chain.get('tag')}
+    path = chain.get('path')
+    if path == 'release' and res('publish') == 'success':
+        return {'result': 'release', 'tag': out('publish').get('published') or chain.get('tag')}
+    if path == 'pr' and res('pr') == 'success':
+        return {'result': 'pr', 'tag': chain.get('tag'), 'pr': out('pr').get('pr')}
+    return {'result': 'error', 'job': 'publish' if path == 'release' else 'pr', 'tag': chain.get('tag')}
+
+
+def said(out_dir: Path) -> list[dict]:
+    """Every stage's three lines of this run, job by job (out/say-<job>.jsonl, sent on as reports)."""
+    def order(q: Path) -> tuple[int, str]:
+        job = q.stem[len('say-'):]
+        return (JOBS.index(job) if job in JOBS else len(JOBS), q.name)
+
+    return [json.loads(line) for q in sorted(out_dir.glob('say-*.jsonl'), key=order)
+            for line in q.read_text(encoding='utf-8').splitlines() if line.strip()]
+
+
+def error_text(stages: list[dict], job: str | None) -> str:
+    """'in <stage>: <message>' from the last stage that reported an error (run.py's boundary), else the failed job."""
+    failed = [s for s in stages if s['found'].startswith('error:')]
+    if failed:
+        return f"in {failed[-1]['step']}: {failed[-1]['found'][len('error:'):].strip()}"
+    return f"in job {job or '?'}: see the log"
+
+
+def load_optional(path: Path) -> dict | None:
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
+
+
+# ---------------------------------------------------------------- heartbeat (SD9)
+
+def heartbeat_stage(p, log: Reporter, needs: dict, event: str, run_id: str, run_url: str, today: str) -> int:
+    """state/last-run.json - date, run, result, the one line and every stage's three lines - committed to main in every
+    run but a dry run (SD9: GitHub turns scheduled workflows off after 60 days without repository activity). After a
+    merged PR's release, state/pending.json goes in the same commit."""
+    oc = outcome(needs, event)
+    stages = said(p.out)
+    d, v, g = (load_optional(p.w(n)) for n in ('diff.json', 'verify.json', 'gate.json'))
+    pending = load_optional(p.root / 'state' / 'pending.json') if oc.get('merged') else None
+    c = pending['counts'] if pending else counts(d, v) if d and v else {}
+    r = oc['result']
+    if r == 'gate-red' and not (g and g.get('unexpected')):
+        r = 'error'                 # the gate job failed before it compared pictures: a technical error
+    line = summary_line(r, tag=oc.get('tag'), counts=c, pr=oc.get('pr'), unexpected=(g or {}).get('unexpected'),
+                        error=error_text(stages, oc.get('job')))
+    chain = (needs.get('chain') or {}).get('outputs') or {}
+    doc = {'date': today, 'runId': run_id, 'runUrl': run_url, 'event': event, 'result': r, 'line': line,
+           'dataVersion': oc.get('tag') or chain.get('tag'), 'previous': chain.get('previous'), 'counts': c, 'stages': stages}
+    (p.root / 'state').mkdir(exist_ok=True)
+    save_json(p.root / 'state' / 'last-run.json', doc)
+    github.git('add', 'state/last-run.json', cwd=p.root)
+    if pending is not None:
+        github.git('rm', '-q', '--ignore-unmatch', 'state/pending.json', cwd=p.root)
+    github.git(*BOT, 'commit', '-q', '-m', f'data: heartbeat {today} - {line}', cwd=p.root)
+    github.git('pull', '--rebase', '-q', 'origin', 'main', cwd=p.root)
+    github.git('push', '-q', 'origin', 'HEAD:main', cwd=p.root)
+    log.headline(line)
+    log.say('heartbeat', f"{event} run {run_id}: results of {', '.join(sorted(needs))}",
+            f'{r}: {line}; state/last-run.json with {len(stages)} stage summaries'
+            + ('; state/pending.json removed' if pending is not None else ''),
+            'none' if r in ('nothing', 'release', 'pr') else 'the run ended red: read the stage named above')
+    return 0
+
+
+# ---------------------------------------------------------------- pr (P6)
+
+def cell(x: object) -> str:
+    if x is None:
+        return '–'
+    if isinstance(x, bool):
+        return str(x).lower()
+    if isinstance(x, float):
+        return f'{x:.4f}'
+    if isinstance(x, list):
+        return ', '.join(x) or '–'
+    return str(x)
+
+
+def stop_row(f: dict) -> str:
+    """One table row per stop: a judge finding with its SD5 cases and metrics old -> new, any other with its detail."""
+    data = f.get('data') or {}
+    if f['rule'] != 'judge' or 'model' not in data:
+        return f"| `{f['id']}` | {f['rule']}: {f['detail']} | – | – | – | – | – |"
+    cases, h = data['cases'], data['hausdorff']
+    hd = f"{cell(h['old'])} → {cell(h['new'])}"
+    if h['delta'] is not None:
+        hd += f" ({h['delta']:+.4f}, tolerance {h['tolerance']})"
+    return (f"| `{f['id']}` | SD5 case {', '.join(map(str, cases))}: {'; '.join(SD5[k] for k in cases)} "
+            f"| {cell(data['model']['old'])} → {data['model']['new']} | {cell(data['passed']['old'])} → {cell(data['passed']['new'])} "
+            f"| {cell(data['fails']['old'])} → {cell(data['fails']['new'])} | {hd} "
+            f"| {cell(data['triangles']['old'])} → {data['triangles']['new']} / {data['budget']['new']} |")
+
+
+def pr_body(tag: str, manifest_sha: str, draft_url: str, run_url: str, d: dict, v: dict, g: dict | None) -> str:
+    """The PR text, from fields only (E1): one row per stop with its SD5 case and metrics old -> new, the gate, the
+    changes, the notes. Grid findings carry Motherlode's request for reports (cryon.rocks/developers)."""
+    stops = [f for f in v['findings'] if f['stop']]
+    notes = [f for f in v['findings'] if not f['stop']]
+    c = counts(d, v)
+    s, m = d['ships'], d['models']
+    out = [f"## {tag}: {plural(len(stops), 'finding')}", '',
+           f"**Merge = approval:** the draft release `{tag}` is published as it is (manifest `{manifest_sha[:12]}`), "
+           'from the merge commit. Close this PR to drop it; the next run replaces the draft.', '',
+           f'Draft release with the contact sheets (visible with write access): {draft_url}  ', f'Run: {run_url}', '',
+           '### Findings that stop the release', '',
+           '| Ship | Rule | Model | passed | fails | Hausdorff (Δ, tolerance) | Triangles / budget |',
+           '|---|---|---|---|---|---|---|', *[stop_row(f) for f in stops], '']
+    grid = [f['id'] for f in stops if f['rule'] in GRID_RULES]
+    if grid:
+        out += [f"**Grid findings** ({', '.join(f'`{i}`' for i in grid)}): the grid data comes from Motherlode's catalog, "
+                'and Motherlode asks for reports of grids that look wrong in-game - please report these to Motherlode '
+                '(cryon.rocks).', '']
+    out += ['### Changes', '',
+            f"- Ships: {c['changed']} changed ({', '.join(s['changed']) or '-'}), {c['new']} new ({', '.join(s['new']) or '-'}), "
+            f"{c['gone']} newly gone ({', '.join(s['gone']) or '-'}), {len(s.get('stillGone', []))} gone before, "
+            f"{len(s.get('back', []))} back",
+            f"- Models: {len(m['changed'])} re-exported, {len(m['new'])} new, {len(m['without_url'])} without URL",
+            f"- Holograms: {c['holosRefreshed']} refreshed", '']
+    if g:
+        pic = g['pictures']
+        out += ['### Gate', '', f"- Pictures: {pic['equal']} equal, {pic['different']} different, {len(g['unexpected'])} unexpected "
+                f"({g.get('expectedShips', '?')} ships expected to change)", '']
+    proposals = [f['proposal']['id'] for f in v['findings'] if f.get('proposal')]
+    if proposals:
+        out += ['### overrides.json', '', f"This PR adds {', '.join(f'`{i}`' for i in proposals)} to `overrides.json`: "
+                'the ship stays as it is until its grid has a transform.', '']
+    out += ['<details><summary>' + plural(len(notes), 'note') + '</summary>', '',
+            *[f"- {f['rule']} `{f['id']}`: {f['detail']}" for f in notes], '', '</details>', '']
+    return '\n'.join(out)
+
+
+def close_superseded(by: str, keep: str | None) -> list[int]:
+    """Open data PRs other than `keep`: their draft was replaced, merging them could only fail. Closed with a comment."""
+    closed = []
+    for x in github.gh_json('pr', 'list', '--state', 'open', '--json', 'number,headRefName') or []:
+        if x['headRefName'].startswith('data/') and x['headRefName'] != keep:
+            github.gh('pr', 'close', str(x['number']), '--comment', f'Superseded by {by}: the draft release of this PR was replaced.')
+            closed.append(x['number'])
+    return closed
+
+
+def pr_stage(p, log: Reporter, tag: str, run_id: str, run_url: str, dry_run: bool) -> int:
+    """The PR path (P6): branch data/YYYY.MM with state/pending.json (the draft and its manifest SHA-256) and the
+    proposed overrides.json, the PR opened or its text updated. Martin's merge pushes pending.json to main, and
+    publish-merged publishes exactly that draft. --dry-run writes out/pr-body.md only."""
+    v, d = (json.loads(p.w(n).read_text(encoding='utf-8')) for n in ('verify.json', 'diff.json'))
+    g = load_optional(p.w('gate.json'))
+    c = counts(d, v)
+    if dry_run:
+        sha, url = '(dry run)', '(dry run)'
+    else:
+        tmp = p.w('pr')
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        github.gh('release', 'download', tag, '--pattern', 'manifest.json', '--dir', str(tmp))
+        sha = manifest.sha256(tmp / 'manifest.json')
+        url = github.gh_json('release', 'view', tag, '--json', 'url')['url']
+    body = p.out / 'pr-body.md'
+    body.write_text(pr_body(tag, sha, url, run_url, d, v, g), encoding='utf-8', newline='\n')
+    if dry_run:
+        log.say('pr --dry-run', 'verify.json, diff.json, gate.json', f"{c['findings']} findings; text in {body}", 'none')
+        return 0
+    year, month, _ = version_key(tag)
+    branch = f'data/{year}.{month:02d}'
+    github.git('switch', '-C', branch, cwd=p.root)
+    (p.root / 'state').mkdir(exist_ok=True)
+    save_json(p.root / 'state' / 'pending.json', {'tag': tag, 'manifestSha256': sha, 'runId': run_id, 'runUrl': run_url, 'counts': c})
+    files = ['state/pending.json']
+    if p.w('overrides-proposed.json').exists():
+        shutil.copyfile(p.w('overrides-proposed.json'), p.root / 'overrides.json')
+        files.append('overrides.json')
+    github.git('add', *files, cwd=p.root)
+    github.git(*BOT, 'commit', '-q', '-m', f"data: {tag} pending ({plural(c['findings'], 'finding')})", cwd=p.root)
+    github.git('push', '--force', 'origin', branch, cwd=p.root)
+    title = f"Ship data {tag}: {plural(c['findings'], 'finding')}"
+    open_ = github.gh_json('pr', 'list', '--head', branch, '--state', 'open', '--json', 'number,headRefName') or []
+    if open_:
+        number = open_[0]['number']
+        github.gh('pr', 'edit', str(number), '--title', title, '--body-file', str(body))
+    else:
+        created = github.gh('pr', 'create', '--base', 'main', '--head', branch, '--title', title, '--body-file', str(body))
+        number = int(created.strip().rsplit('/', 1)[-1])
+    closed = close_superseded(f'#{number}', branch)
+    log.output('pr', number)
+    log.say('pr', f"verify.json ({c['findings']} stops), diff.json, gate.json; draft {tag} (manifest {sha[:12]})",
+            f"PR #{number} on {branch} ({'updated' if open_ else 'opened'}); committed {', '.join(files)}; "
+            f'{len(closed)} superseded PRs closed',
+            f'Martin: read PR #{number}; merge = the draft is published')
     return 0

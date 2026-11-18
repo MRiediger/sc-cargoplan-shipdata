@@ -74,13 +74,34 @@ class FakeGitHub:
 
     def __init__(self) -> None:
         self.releases: dict[str, dict] = {}
+        self.prs: list[dict] = []
         self.calls: list[tuple[str, ...]] = []
 
     def add(self, tag: str, folder: Path, draft: bool = False) -> None:
         self.releases[tag] = {'isDraft': draft, 'assets': {q.name: q.read_bytes() for q in sorted(folder.iterdir())}}
 
+    def pr(self, args: tuple[str, ...]) -> str:
+        sub = args[1]
+        opt = lambda k: args[args.index(k) + 1] if k in args else None
+        if sub == 'list':
+            return json.dumps([{'number': x['number'], 'headRefName': x['headRefName']} for x in self.prs
+                               if x['state'] == 'open' and opt('--head') in (None, x['headRefName'])])
+        if sub == 'create':
+            n = 10 + len(self.prs)
+            self.prs.append({'number': n, 'headRefName': opt('--head'), 'state': 'open', 'title': opt('--title'),
+                             'body': Path(opt('--body-file')).read_text(encoding='utf-8')})
+            return f'https://github.com/o/r/pull/{n}\n'
+        x = next(x for x in self.prs if x['number'] == int(args[2]))
+        if sub == 'edit':
+            x.update(title=opt('--title'), body=Path(opt('--body-file')).read_text(encoding='utf-8'))
+        elif sub == 'close':
+            x['state'] = 'closed'
+        return ''
+
     def __call__(self, *args: str) -> str:
         self.calls.append(args)
+        if args[0] == 'pr':
+            return self.pr(args)
         sub = args[1]
         tag = args[2] if len(args) > 2 and not args[2].startswith('-') else None
         if sub == 'list':
@@ -93,7 +114,8 @@ class FakeGitHub:
                 self.releases[tag]['assets'][Path(f).name] = Path(f).read_bytes()
         elif sub == 'view':
             r = self.releases[tag]
-            return json.dumps({'tagName': tag, 'isDraft': r['isDraft'], 'assets': [
+            return json.dumps({'tagName': tag, 'isDraft': r['isDraft'], 'url': f'https://github.com/o/r/releases/tag/untagged-{tag}',
+                               'assets': [
                 {'name': n, 'size': len(b), 'digest': 'sha256:' + hashlib.sha256(b).hexdigest(), 'state': 'uploaded'}
                 for n, b in sorted(r['assets'].items())]})
         elif sub == 'download':
@@ -113,7 +135,7 @@ class FakeGitHub:
         return ''
 
     def subs(self) -> list[str]:
-        return [c[1] for c in self.calls]
+        return [c[1] for c in self.calls if c[0] == 'release']
 
 
 @pytest.fixture
