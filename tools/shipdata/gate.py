@@ -81,7 +81,17 @@ def expected_ids(old_m: dict, new_m: dict, old_data: Path, new_data: Path) -> li
         if (not old.exists() or diff.content_hash(json.loads(old.read_text(encoding='utf-8-sig'))) != diff.content_hash(doc)
                 or doc.get('modelKey') in moved):
             out.append(q.stem)
-    return out
+    # Cargo modules (app K5.3): ShipLoader adds one entry <ship>_<module> per ship a module names
+    # (ModuleDto.ConfigurationId), rendered with the base ship's hologram and outline. It may differ when its base may,
+    # or when the module file itself changed (without stamps). Found by the local gate of 18 Nov (aurora_mk_ii_ts_module).
+    read = lambda q: json.loads(q.read_text(encoding='utf-8-sig')) if q.exists() else None
+    bases = set(out)
+    for name in sorted({q.name for d in (old_data, new_data) for q in (d / 'ships' / 'modules').glob('*.json')}):
+        old_mod, new_mod = read(old_data / 'ships' / 'modules' / name), read(new_data / 'ships' / 'modules' / name)
+        changed = old_mod is None or new_mod is None or diff.content_hash(old_mod) != diff.content_hash(new_mod)
+        for mod in (m for m in (old_mod, new_mod) if m):
+            out += [f"{sid}_{mod['id']}" for sid in mod.get('ships', []) if changed or sid in bases]
+    return sorted(set(out))
 
 
 def sheet_order(runs: Runs, unexpected: list[str], new_m: dict, verify: dict) -> list[tuple[str, str]]:

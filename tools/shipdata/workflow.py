@@ -430,10 +430,13 @@ def pr_body(tag: str, manifest_sha: str, draft_url: str, run_url: str, d: dict, 
             f"{len(s.get('back', []))} back",
             f"- Models: {len(m['changed'])} re-exported, {len(m['new'])} new, {len(m['without_url'])} without URL",
             f"- Holograms: {c['holosRefreshed']} refreshed", '']
+    out += ['### Gate', '']
     if g:
         pic = g['pictures']
-        out += ['### Gate', '', f"- Pictures: {pic['equal']} equal, {pic['different']} different, {len(g['unexpected'])} unexpected "
+        out += [f"- Pictures: {pic['equal']} equal, {pic['different']} different, {len(g['unexpected'])} unexpected "
                 f"({g.get('expectedShips', '?')} ships expected to change)", '']
+    else:
+        out += [f'- no gate result for {tag}', '']
     proposals = [f['proposal']['id'] for f in v['findings'] if f.get('proposal')]
     if proposals:
         out += ['### overrides.json', '', f"This PR adds {', '.join(f'`{i}`' for i in proposals)} to `overrides.json`: "
@@ -459,6 +462,8 @@ def pr_stage(p, log: Reporter, tag: str, run_id: str, run_url: str, dry_run: boo
     publish-merged publishes exactly that draft. --dry-run writes out/pr-body.md only."""
     v, d = (json.loads(p.w(n).read_text(encoding='utf-8')) for n in ('verify.json', 'diff.json'))
     g = load_optional(p.w('gate.json'))
+    if g and g.get('new') != tag:       # a gate.json of another release (left from an earlier run) says nothing here
+        g = None
     c = counts(d, v)
     if dry_run:
         sha, url = '(dry run)', '(dry run)'

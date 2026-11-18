@@ -86,6 +86,36 @@ def test_ships_sharing_a_model_key_are_all_expected(tmp_path: Path) -> None:
     assert gate.expected_ids(om, nm, od, nd) == ['a', 'a2']
 
 
+def with_module(data: Path, module: dict) -> None:
+    (data / 'ships' / 'modules').mkdir(exist_ok=True)
+    (data / 'ships' / 'modules' / f"{module['id']}.json").write_text(json.dumps(module), encoding='utf-8')
+
+
+MODULE = {'schemaVersion': 1, 'id': 'ts_module', 'name': 'TS module', 'ships': ['a', 'b'], 'source': 'in game',
+          'racks': [{'id': 'ts-module', 'origin': [-7, -1, 0]}]}
+
+
+def test_a_module_entry_follows_its_base_ship(tmp_path: Path) -> None:
+    """Found by the local gate of 18 Nov: the app builds aurora_mk_ii_ts_module from aurora_mk_ii and
+    modules/ts_module.json (ModuleDto.ConfigurationId: <ship>_<module>); it renders with the base's hologram, so it may
+    differ whenever its base may."""
+    om, od = unpacked(tmp_path, 'old', OLD_SHIPS, OLD_HOLOS)
+    nm, nd = unpacked(tmp_path, 'new', OLD_SHIPS, {**OLD_HOLOS, 'test-a': b'refreshed a'})
+    for d in (od, nd):
+        with_module(d, MODULE)
+    assert gate.expected_ids(om, nm, od, nd) == ['a', 'a_ts_module']
+
+
+def test_a_changed_module_is_expected_on_every_ship_it_names(tmp_path: Path) -> None:
+    om, od = unpacked(tmp_path, 'old', OLD_SHIPS, OLD_HOLOS)
+    nm, nd = unpacked(tmp_path, 'new', OLD_SHIPS, OLD_HOLOS)
+    with_module(od, MODULE)
+    with_module(nd, dict(MODULE, racks=[{'id': 'ts-module', 'origin': [-6, -1, 0]}]))
+    assert gate.expected_ids(om, nm, od, nd) == ['a_ts_module', 'b_ts_module']
+    with_module(nd, dict(MODULE, source='in game, checked again'))           # a stamp alone: nothing
+    assert gate.expected_ids(om, nm, od, nd) == []
+
+
 # ---------------------------------------------------------------- two picture runs compared (port of csvdiff.py)
 
 def test_compare_runs(tmp_path: Path) -> None:

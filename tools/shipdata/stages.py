@@ -414,7 +414,7 @@ def release_stage(p: Paths, log: Reporter, dry_run: bool) -> int:
     log.say('release --dry-run', f"stage of {m['dataVersion']} against its manifest, packed to {p.out / 'release'} with NOTICE.md",
             f"{len(assets)} assets, {total} bytes: manifest.json, NOTICE.md, {m['assets']['ships']}, {len(holos)} x .holo; "
             'nothing uploaded, the model cache untouched',
-            'none (publishing comes with T12.2)')
+            'none (publishing: run.py draft, then publish after a green gate)')
     return 0
 
 

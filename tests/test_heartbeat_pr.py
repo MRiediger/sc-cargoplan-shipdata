@@ -30,8 +30,8 @@ DIFF = {'ships': {'changed': ['f7c_hornet_mk_ii'], 'new': ['hyun'], 'gone': ['mo
                   'back': [], 'same': ['alpha']},
         'models': {'changed': [f'M{i}' for i in range(96)], 'new': ['GAMA_Hyun', 'ANVL_Hornet_F7C_Mk2'], 'same': [],
                    'without_url': ['Cyclone'], 'unused': []}}
-GATE = {'pictures': {'equal': 1300, 'different': 120, 'missing': 0}, 'unexpected': [], 'expectedShips': 99,
-        'sheets': ['contact-sheet-1.png']}
+GATE = {'old': 'ships-2026.11', 'new': 'ships-2026.11.1', 'pictures': {'equal': 1300, 'different': 120, 'missing': 0},
+        'unexpected': [], 'expectedShips': 99, 'sheets': ['contact-sheet-1.png']}
 
 
 # ---------------------------------------------------------------- the one line (SD9)
@@ -205,6 +205,16 @@ def test_pr_without_proposals_commits_pending_only_and_updates_an_open_pr(gh: Fa
     assert next(c for c in git.calls if c[0] == 'add')[1:] == ('state/pending.json',)
     assert not (p.root / 'overrides.json').exists()
     assert [x['number'] for x in gh.prs] == [7] and gh.prs[0]['body'] != 'old'
+
+
+def test_pr_ignores_a_gate_result_of_another_release(gh: FakeGitHub, git: FakeGit, tmp_path: Path) -> None:
+    """A6, found in the local probe of 18 Nov: a gate.json left from an earlier gate run must not appear as this draft's
+    gate in the PR text."""
+    p = paths(tmp_path)
+    reports(p, gate=dict(GATE, new='ships-2026.11'))
+    workflow.pr_stage(p, Reporter(p.out), 'ships-2026.11.1', '-', '-', dry_run=True)
+    body = (p.out / 'pr-body.md').read_text(encoding='utf-8')
+    assert '1300 equal' not in body and 'no gate result for ships-2026.11.1' in body
 
 
 def test_pr_dry_run_writes_the_text_only(gh: FakeGitHub, git: FakeGit, tmp_path: Path) -> None:
