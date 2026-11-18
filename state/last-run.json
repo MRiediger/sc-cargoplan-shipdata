@@ -1,26 +1,34 @@
 {
  "date": "2026-11-18",
- "runId": "44339569545",
- "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44339569545",
- "event": "push",
- "result": "release",
- "line": "Release ships-2026.11.1: 1 ship changed, 1 new, 8 gone, 91 holos refreshed",
- "dataVersion": "ships-2026.11.1",
- "previous": null,
- "counts": {
-  "changed": 1,
-  "new": 1,
-  "gone": 8,
-  "holosRefreshed": 91,
-  "findings": 2
- },
+ "runId": "44340334581",
+ "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44340334581",
+ "event": "workflow_dispatch",
+ "result": "nothing",
+ "line": "nothing changed",
+ "dataVersion": null,
+ "previous": "ships-2026.11.1",
+ "counts": {},
  "stages": [
   {
-   "job": "publish-merged",
-   "step": "publish",
-   "checked": "draft ships-2026.11.1: 105 assets against its manifest and state/pending.json",
-   "found": "published ships-2026.11.1 as latest (target 0a93d3267249); 16 contact sheets removed; 0 old releases deleted (-); model cache: 0 older hashes removed, 51999876 bytes left; 0 open data PRs closed as superseded",
+   "job": "chain",
+   "step": "fetch",
+   "checked": "catalog from cryon.rocks, saved to /home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/cache/catalogs/2026-11-18/raw; 101 model URLs against cache/models",
+   "found": "4.10.3-LIVE.13165946, updatedAt 2026-11-16T11:36:30.299Z, 101 ships, 101 with a model; models {'cached': 101, 'fetched': 0, 'unavailable': 0}; requests: 1 API call, 1 page GET, 0 model GET",
    "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "previous",
+   "checked": "published data releases (2); ships-2026.11.1: every asset against its manifest",
+   "found": "ships-2026.11.1: 105 assets, 32748772 bytes, 102 holograms, ships.zip unpacked; this run releases as ships-2026.11.2",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "diff",
+   "checked": "catalog 4.10.3-LIVE.13165946 (2026-11-16T11:36:30.299Z) against release ships-2026.11.1: manifest.json and ships.zip checked, 109 ship files without stamps, 100 models; grid order against the release's orderKeys",
+   "found": "ships: 0 changed (), 0 new (), 0 newly gone (), 8 gone before (600i_executive_edition, carrack_expedition_w_c8x, carrack_w_c8x, cyclone, mole_carbon_edition, mole_talus_edition, mustang_alpha_vindicator, valkyrie_liberator_edition), 0 back (), 101 same; models: 0 changed (re-export), 0 new, 1 without URL (TMBL_Cyclone), 2 unused (ANVL_Carrack_Expedition, ORIG_135c); grid order compared for 100 ships, 0 in another order, not compared for 0 (); import {'absent': 8, 'kept': 1, 'same': 100}",
+   "todo": "none: nothing changed"
   }
  ]
 }
