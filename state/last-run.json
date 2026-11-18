@@ -1,10 +1,10 @@
 {
  "date": "2026-11-18",
- "runId": "44296781671",
- "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44296781671",
+ "runId": "44317285689",
+ "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44317285689",
  "event": "workflow_dispatch",
- "result": "error",
- "line": "error in job pr: see the log",
+ "result": "pr",
+ "line": "PR #1: 2 findings",
  "dataVersion": "ships-2026.11.1",
  "previous": "ships-2026.11",
  "counts": {
@@ -19,7 +19,7 @@
    "job": "chain",
    "step": "fetch",
    "checked": "catalog from cryon.rocks, saved to /home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/cache/catalogs/2026-11-18/raw; 101 model URLs against cache/models",
-   "found": "4.10.3-LIVE.13165946, updatedAt 2026-11-16T11:36:30.299Z, 101 ships, 101 with a model; models {'cached': 0, 'fetched': 101, 'unavailable': 0}; requests: 1 API call, 1 page GET, 101 model GET",
+   "found": "4.10.3-LIVE.13165946, updatedAt 2026-11-16T11:36:30.299Z, 101 ships, 101 with a model; models {'cached': 101, 'fetched': 0, 'unavailable': 0}; requests: 1 API call, 1 page GET, 0 model GET",
    "todo": "none"
   },
   {
@@ -40,7 +40,7 @@
    "job": "chain",
    "step": "build",
    "checked": "98 models (changed and new): flatten, cull, ladder 20k/30k/40k, export, outline; outlines-v2 (4 entries kept); import with the new floors",
-   "found": "98 built in 3663 s, 0 without model (-), 0 failed; import {'absent': 8, 'kept': 1, 'same': 97, 'updated': 3}",
+   "found": "98 built in 5167 s, 0 without model (-), 0 failed; import {'absent': 8, 'kept': 1, 'same': 97, 'updated': 3}",
    "todo": "none"
   },
   {
@@ -53,16 +53,23 @@
   {
    "job": "chain",
    "step": "draft",
-   "checked": "/home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/out/release against its manifest; draft ships-2026.11.1 (target fb8d87533a77), manifest.json uploaded last",
-   "found": "105 assets uploaded and checked against the manifest (manifest 695aa2952108); 0 drafts of earlier runs deleted (-)",
+   "checked": "/home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/out/release against its manifest; draft ships-2026.11.1 (target fadc7719bcb5), manifest.json uploaded last",
+   "found": "105 assets uploaded and checked against the manifest (manifest 94129864f3ca); 1 drafts of earlier runs deleted (ships-2026.11.1)",
    "todo": "none: the gate renders the draft; it is published only after a green gate (or a merged PR)"
   },
   {
    "job": "gate",
    "step": "gate",
-   "checked": "ships-2026.11 and ships-2026.11.1 rendered with the same app in one job (540 s); 96 ships expected to change (data without stamps, hologram, outline)",
+   "checked": "ships-2026.11 and ships-2026.11.1 rendered with the same app in one job (542 s); 96 ships expected to change (data without stamps, hologram, outline)",
    "found": "620 pictures equal, 820 different, 0 missing, placement numbers differ for 26; unexpected: none; 16 contact sheets on draft ships-2026.11.1",
    "todo": "none: publish or PR"
+  },
+  {
+   "job": "pr",
+   "step": "pr",
+   "checked": "verify.json (2 stops), diff.json, gate.json; draft ships-2026.11.1 (manifest 94129864f3ca)",
+   "found": "PR #1 on data/2026.11 (opened); committed state/pending.json; 0 superseded PRs closed",
+   "todo": "Martin: read PR #1; merge = the draft is published"
   }
  ]
 }
