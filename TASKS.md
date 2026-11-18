@@ -390,7 +390,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 - [x] Abnahme Martin (18.11.2026), Review im Master-Chat.
 
-### [ ] T12.2 Workflow `ship-data.yml`
+### [ ] T12.2 Workflow `ship-data.yml` (Plan freigegeben 18.11.2026 mit E1–E3, `docs/plans/T12.2-workflow.md`)
 
 **Warum:** Der Lauf ohne Martin. Alles, was heute Zuruf ist, steht danach im YAML oder in `run.py`.
 - cron `23 4 1 * *` + `workflow_dispatch` (Input `dry-run`), `permissions: contents: write, pull-requests: write`
@@ -410,7 +410,24 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 - **`state/last-run.json`** schreibt der Workflow in jedem Lauf (SD9)
 - **`pytest`** läuft im Ketten-Job vor `fetch`
 
-**Akzeptanz:** Dispatch ohne Änderung: grün, „nothing changed“, ein Commit in `state/`, kein Release. Dispatch mit provozierter Regel (Test-Override): PR mit Befund und Artefakt, kein Release. Dispatch mit provozierter Änderung an einem Schiff: Release `ships-2026.11-test` mit vollständigem Manifest, danach gelöscht. Martin hat drei Knöpfe gedrückt und keinen Befehl getippt.
+~~**Akzeptanz:** Dispatch ohne Änderung … Release `ships-2026.11-test` …~~ ersetzt durch D1 (P2 unten).
+
+**Entscheidungen aus der T12.1b-Abnahme (Martin, 18.11.):** **D1** Akzeptanz mit echten Läufen: Seed-Release `ships-2026.11` (aus T12.6 vorgezogen) → Dispatch 1 (PR-Pfad: F7C und `hyun` SD5 Fall 4) → Merge (Release `ships-2026.11.1`) → Dispatch 2 („nothing changed“). **D2** `nothingChanged` zuerst reparieren, Test zuerst. **D3** Cron ab dem ersten Commit aktiv, kein Schalter im YAML. **Nachtrag Master-Chat:** OpenAPI bestätigt kein Modell-Endpunkt; Transform-Konvention und „per release“ als Zitat nach `provenance.md`; Grid-Befunde im PR-Text mit Hinweis auf Motherlode-Meldung.
+
+**Präzisierung in der Planphase, ratifiziert durch Freigabe** (Details im Plan):
+1. **P1 Draft-Release statt Artefakt** (Martin, 18.11.): Daten und Kontaktabzug liegen im Entwurfs-Release (nur mit Schreibrecht sichtbar), nicht in öffentlichen Artefakten (A17); Artefakte nur für Berichte ohne CIG-Material. → SD10.
+2. **P2** Akzeptanz nach D1 statt provozierter Fälle.
+3. **P3** Gate rot = roter Lauf, kein PR (sonst Release ohne grünes Gate). → SD11.
+4. **P4** `nothingChanged` zählt zusätzlich „wieder da“, geänderte Reihenfolge und Import-Stopps als Änderung.
+5. **P5** `tools/gate/*.sh` + `csvdiff.py` werden `run.py gate` (Python, mit Tests); Kontaktabzug aus `sc-ship-outlines/motherlode_sheet.py` portiert.
+6. **P6** Merge → Release über `push` auf `state/pending.json` (Entwurf nur bei gleichem Manifest-SHA); „Approve workflows to run“ entfällt voraussichtlich, weil `ship-data.yml` keinen `pull_request`-Trigger hat.
+7. **P7** `verify --ci`: Exit 2 → Output `path=pr`, Exit 0; Stufen schreiben `$GITHUB_OUTPUT` selbst.
+8. **P8** Modell-Prune im `publish`-Job (Cache wiederherstellen → prunen → neu speichern).
+9. **P9** `dry-run` = Kette bis `verify` + `release --dry-run`, kein Entwurf, kein Commit.
+10. **P10** Seed-Upload über `run.py draft` + `publish`, lokal.
+11. **E1** `previous` wählt den Vorgänger nach Version, nicht über `isLatest`. **E2** Backlog-Zeile `ci.yml`. **E3** SD8-Addendum Dependabot.
+
+**Akzeptanz (D1):** Seed-Release `ships-2026.11` (104 Assets, `latest/download/manifest.json` = Seed-Manifest); Dispatch 1 → PR mit Befund je Stopp und Kontaktabzug am Entwurf; Merge → Release `ships-2026.11.1` aus dem Merge-Commit, zwei Releases bleiben; Dispatch 2 → „nothing changed“, Commit in `state/`, kein Release. Martin: zwei Dispatches, ein Merge, kein Befehl.
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 
@@ -479,6 +496,7 @@ Kein Plan, sondern Reaktion: wird erst zum Task, wenn der Anlass eintritt.
 - **Seite `cryon.rocks/ops/cargo` ändert sich** → Pipeline meldet PR „model URLs unavailable“, letzter Stand bleibt (A11).
 - **Ein Schiff > 3 Läufe `missingSince`** → Zeile hier, Entscheidung Martin: behalten oder aus dem Manifest nehmen.
 - **PAT für den PR-Pfad**, falls „Approve workflows to run“ bei jedem PR stört.
+- **`ci.yml`** – `pytest` bei Push und PR, getrennt vom Datenlauf (E2, T12.2). Anlass: ein Code-PR (ab T12.6 Branch + `--no-ff`) würde ohne Testlauf gemergt; heute läuft `pytest` nur im Job `chain` von `ship-data.yml`.
 - **Holo-Kill-Switch** (CIG oder Sciirof sagt Stopp): `holo: null` im nächsten Release, Assets der letzten zwei Releases löschen.
 - **Legenden-Warnzeilen** aus v0.5.1 – App-Thema, nicht hier (Verweis).
 - **WSL-Werkzeuge unter `/root` (fragil).** Anlass T12.1: der WSL-Standardbenutzer wechselte während der Session von `root` auf `artiniediger`; die Werkzeuge liegen unter `/root/s12tools`, `local-wsl.sh` läuft nur mit `wsl -u root` und braucht den `safe.directory`-Umweg. Reaktion, sobald es wieder hakt: Werkzeuge unter den Standardbenutzer (`SHIPDATA_TOOLS`) neu aufsetzen.
