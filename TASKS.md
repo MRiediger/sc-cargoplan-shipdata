@@ -432,6 +432,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 **T12.2 Befund (laufend)**
 
 1. **Block 1 – `nothingChanged` (D2, P4).** `diff.split_gone` trennt neu Verschwundene von Schiffen, die im Vorgänger schon `missingSince`/`follows` hatten (`diff.json` `ships.gone` / `ships.stillGone`); `verify` gibt `rules.missing` beide Listen. `diff.nothing_changed` zählt zusätzlich `back`, geänderte Reihenfolge und Import-Stopps (`handcheck`, `kept` ohne `overrides.json`-Eintrag). Tests erst rot (**11 failed**), dann grün; ein bestehender Pipeline-Test prüfte das alte Verhalten und erwartet jetzt `stillGone` + `nothingChanged`. **5 Provokationen**, je rot: alte Zählung (3 rot) · `back` raus · Import-Stopps raus · Reihenfolge raus · `verify` ohne `stillGone` (Datum ginge verloren). Suite: `97 passed in 102.50s`.
+2. **Block 2 – Version und Hygiene.** `shipdata/workflow.py` (reine Funktionen: `version_key`, `next_version`, `pick_previous` nach Version statt `isLatest` (E1), `to_delete` behält die letzten zwei veröffentlichten, `stale_drafts`), `shipdata/github.py` (`gh`, `gh_json`, `git` – die einzige Stelle mit `subprocess` für GitHub). 11 Tests, vorher rot (Modul fehlt). **4 Provokationen**, je rot: Version als Text sortiert (5 rot) · Vorgänger über `isLatest` (1) · drei behalten (1) · Entwürfe als veröffentlicht gezählt (3).
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 
