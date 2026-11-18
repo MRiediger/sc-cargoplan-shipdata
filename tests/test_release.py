@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import CLEAN
 from shipdata import release, rules
 
 MOTHERLODE = 'cryon.rocks (Motherlode) 4.10.3-LIVE.13165946, 2026-11-12T20:50:33.036Z'
@@ -32,7 +33,7 @@ def holo(tmp: Path, slugs: list[str]) -> Path:
         (h / f'{slug}.holo').write_bytes(data)
         ships.append({'slug': slug, 'file': f'{slug}.holo', 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
                       'model': 'TEST', 'rawSha256': 'a' * 64, 'budget': 20000, 'triangles': 1, 'edges': [1, 1, 1],
-                      'passed': True, 'metrics': {}})
+                      'passed': True, 'metrics': dict(CLEAN)})
     (h / 'manifest.json').write_text(json.dumps({'dataVersion': 'holo-v3', 'formatVersion': 2, 'ships': ships}), encoding='utf-8')
     (h / 'NOTICE.md').write_text('notice', encoding='utf-8')
     return h
@@ -55,18 +56,37 @@ def test_seed_reads_built_from_out_of_the_source_lines(tmp_path: Path) -> None:
 
 
 def test_seed_keeps_passed_false_and_the_metrics_of_the_holo_release(tmp_path: Path) -> None:
-    """P9: holo-v3 published 22 ships with passed=false. The seed carries that over, so the first run's judge sees them as
-    published-failed with the same model (a note), not as new holos (a stop)."""
+    """holo-v3 published 22 ships with passed=false. The seed carries that over with the fails derived from the metrics
+    (F1), so the first run's judge compares a re-export with them (a note), not with nothing (case 4, a stop)."""
     h = holo(tmp_path, ['test-a', 'test-b'])
     doc = json.loads((h / 'manifest.json').read_text(encoding='utf-8'))
-    doc['ships'][1].update(passed=False, triangles=39353, budget=40000, metrics={'topHausdorff': 0.0123})
+    doc['ships'][1].update(passed=False, triangles=39353, budget=40000, metrics=dict(CLEAN, topHausdorff=0.0123))
     (h / 'manifest.json').write_text(json.dumps(doc), encoding='utf-8')
     out = release.seed(app(tmp_path, {'a': MOTHERLODE}), h, tmp_path / 'out', app_tag='v0.5.1', data_version='x',
                        generated_at='x', pipeline_commit='x', tools={})
     entry = json.loads((out.folder / 'manifest.json').read_text(encoding='utf-8'))['holo']['ships']['test-b']
-    assert (entry['passed'], entry['triangles'], entry['budget'], entry['metrics']) == (False, 39353, 40000, {'topHausdorff': 0.0123})
-    assert rules.judge('test-b', {'passed': False, 'triangles': 39353, 'budget': 40000, 'fails': ['topHausdorff']},
-                       previous=entry, new_model=False).stop is False
+    assert (entry['passed'], entry['triangles'], entry['budget']) == (False, 39353, 40000)
+    assert entry['metrics']['topHausdorff'] == 0.0123
+    assert entry['fails'] == ['hausdorff']
+    pp = {'passed': False, 'triangles': 39353, 'budget': 40000, 'fails': ['hausdorff'], 'topHausdorff': 0.0123,
+          'sideHausdorff': 0.0, 'frontHausdorff': 0.0}
+    assert rules.judge('test-b', pp, previous=entry, class_name='TEST').stop is False
+
+
+def test_seed_derives_no_fails_for_a_clean_hologram(tmp_path: Path) -> None:
+    out = release.seed(app(tmp_path, {'a': MOTHERLODE}), holo(tmp_path, ['test-a']), tmp_path / 'out', app_tag='v0.5.1',
+                       data_version='x', generated_at='x', pipeline_commit='x', tools={})
+    assert json.loads((out.folder / 'manifest.json').read_text(encoding='utf-8'))['holo']['ships']['test-a']['fails'] == []
+
+
+def test_seed_stops_when_passed_and_the_metrics_disagree(tmp_path: Path) -> None:
+    h = holo(tmp_path, ['test-a'])
+    doc = json.loads((h / 'manifest.json').read_text(encoding='utf-8'))
+    doc['ships'][0]['metrics'] = dict(CLEAN, topIou=0.5)          # fails iou, but published as passed
+    (h / 'manifest.json').write_text(json.dumps(doc), encoding='utf-8')
+    with pytest.raises(release.ReleaseError, match='test-a'):
+        release.seed(app(tmp_path, {'a': MOTHERLODE}), h, tmp_path / 'out', app_tag='v0.5.1', data_version='x',
+                     generated_at='x', pipeline_commit='x', tools={})
 
 
 def test_seed_stops_when_ships_of_the_newest_build_disagree_on_the_date(tmp_path: Path) -> None:

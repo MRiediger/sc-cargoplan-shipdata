@@ -10,7 +10,7 @@ from shipdata import manifest
 SHIP = {'schemaVersion': 6, 'id': 'alpha', 'modelKey': 'test-alpha', 'source': 'cryon.rocks (Motherlode) 4.10.3-LIVE.1, 2026-11-12',
         'totalScu': 4, 'racks': [{'id': 'rack-0', 'capacityScu': 4}]}
 HOLO = {'test-alpha': {'model': 'TEST_A', 'rawSha256': 'a' * 64, 'budget': 20000, 'triangles': 100, 'edges': [1, 2, 3],
-                       'passed': True, 'metrics': {}}}
+                       'passed': True, 'fails': [], 'metrics': {}}}
 
 
 def stage(tmp: Path, with_holo: bool = True) -> Path:
@@ -67,4 +67,14 @@ def test_reading_checks_the_required_fields(tmp_path: Path) -> None:
     del m['ships']
     (s / 'manifest.json').write_text(json.dumps(m), encoding='utf-8')
     with pytest.raises(manifest.ManifestError, match='ships'):
+        manifest.read(s / 'manifest.json')
+
+
+def test_a_hologram_entry_without_fails_is_turned_down(tmp_path: Path) -> None:
+    """F1: the judge's case 5 compares with the last release's fails; an entry without them cannot be judged."""
+    s = stage(tmp_path)
+    m = build(s, HOLO)
+    del m['holo']['ships']['test-alpha']['fails']
+    manifest.write(s / 'manifest.json', m)
+    with pytest.raises(manifest.ManifestError, match='without fails: test-alpha'):
         manifest.read(s / 'manifest.json')

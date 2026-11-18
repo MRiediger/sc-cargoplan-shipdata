@@ -12,6 +12,10 @@ TOOLS = ROOT / 'tools'
 FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 sys.path.insert(0, str(TOOLS))
 
+# The judge's metrics of a clean hologram (holo_mesh.METRIC_KEYS), for holo release fixtures.
+CLEAN = {'errorM': 0.0, 'topIou': 1.0, 'sideIou': 1.0, 'frontIou': 1.0, 'topHausdorff': 0.0, 'sideHausdorff': 0.0,
+         'frontHausdorff': 0.0, 'edgeFscore': 1.0, 'holeRatio': 1.0, 'windingShare': 0.0, 'sliverShare': 0.0}
+
 needs_pwsh = pytest.mark.skipif(shutil.which('pwsh') is None, reason='pwsh not on PATH (runs in WSL and on the runner)')
 
 

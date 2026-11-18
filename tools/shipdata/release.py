@@ -10,10 +10,14 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from shipdata import manifest
+from shipdata import chain, manifest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import holo_mesh  # noqa: E402  (byte-equal copy; its judge derives the fails of a holo release without them, F1)
 
 SOURCE = re.compile(r'^cryon\.rocks \(Motherlode\) (?P<build>\d+\.\d+(?:\.\d+)?-[A-Z]+\.\d+), (?P<updated>.+)$')
 
@@ -60,6 +64,17 @@ def motherlode_from_sources(sources: dict[str, str]) -> tuple[dict, dict[str, st
     return {'gameBuild': newest, 'updatedAt': dates[0]}, others
 
 
+def derived_fails(e: dict) -> list[str]:
+    """The fails of a holo release entry (holo-v3 has none, F1): holo_mesh.judge on its metrics with the chain's sliver
+    limit. errorM needs the length, which the entry lacks: error never counts as failed. Checked against the 97 PP.json
+    of T12.1's byte-equal build: 97 / 97 equal. An entry whose passed disagrees with its metrics stops the seed."""
+    rec = dict(e['metrics'], triangles=e['triangles'], target=e['budget'], lengthM=float('inf'))
+    fails = holo_mesh.judge(rec, float(chain.SLIVER_LIMIT))
+    if bool(fails) == e['passed']:
+        raise ReleaseError(f"{e['slug']}: passed={e['passed']} but its metrics fail {fails or 'nothing'}")
+    return fails
+
+
 def seed(app: Path, holo_dir: Path, out: Path, *, app_tag: str, data_version: str, generated_at: str,
          pipeline_commit: str, tools: dict) -> Seed:
     if out.exists():
@@ -74,7 +89,8 @@ def seed(app: Path, holo_dir: Path, out: Path, *, app_tag: str, data_version: st
         if len(data) != e['bytes'] or hashlib.sha256(data).hexdigest() != e['sha256']:
             raise ReleaseError(f"{e['slug']}: {e['file']} differs from the holo release's manifest")
         (out / 'holo' / f"{e['slug']}.holo").write_bytes(data)
-        holo_ships[e['slug']] = {k: v for k, v in e.items() if k not in ('slug', 'file', 'bytes', 'sha256')}
+        holo_ships[e['slug']] = dict({k: v for k, v in e.items() if k not in ('slug', 'file', 'bytes', 'sha256')},
+                                     fails=derived_fails(e))
     sources = {p.stem: json.loads(p.read_text(encoding='utf-8-sig')).get('source') for p in sorted((out / 'ships').glob('*.json'))}
     motherlode, others = motherlode_from_sources(sources)
     m = manifest.build(out, data_version=data_version, generated_at=generated_at, motherlode=motherlode, app_tag=app_tag,

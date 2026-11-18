@@ -299,16 +299,15 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
     (stage / 'holo').mkdir()
     prev_holo = (m.get('holo') or {}).get('ships') or {}
     holo_ships: dict[str, dict] = {}
-    moved = set(d['models']['changed']) | set(d['models']['new'])
     same_bytes = 0
     for slug, info in sorted(b['built'].items()):
         work = p.w('holo') / info['className']
         pp, flat = load_json(work / 'PP.json'), load_json(work / 'flat.json')
         shutil.copyfile(work / 'PP.holo', stage / 'holo' / f'{slug}.holo')
         holo_ships[slug] = {'model': info['className'], 'rawSha256': flat['rawSha256'], 'budget': pp['budget'],
-                            'triangles': pp['triangles'], 'edges': pp['edges'], 'passed': pp['passed'],
+                            'triangles': pp['triangles'], 'edges': pp['edges'], 'passed': pp['passed'], 'fails': pp['fails'],
                             'metrics': {k: pp[k] for k in holo_mesh.METRIC_KEYS}}
-        f = rules.judge(slug, pp, prev_holo.get(slug), new_model=info['className'] in moved or slug not in prev_holo)
+        f = rules.judge(slug, pp, prev_holo.get(slug), info['className'])
         if f:
             findings.append(f)
         if slug in prev_holo and manifest.sha256(stage / 'holo' / f'{slug}.holo') == prev_holo[slug]['sha256']:

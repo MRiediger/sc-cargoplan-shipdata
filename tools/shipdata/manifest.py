@@ -27,7 +27,7 @@ def data_files(stage: Path) -> list[str]:
 
 def build(stage: Path, *, data_version: str, generated_at: str, motherlode: dict, app_tag: str, pipeline_commit: str,
           tools: dict, holo_ships: dict[str, dict] | None, ships: dict[str, dict]) -> dict:
-    """holo_ships: slug -> {model, rawSha256, budget, triangles, edges, passed, metrics}; file, bytes and sha256 are taken
+    """holo_ships: slug -> {model, rawSha256, budget, triangles, edges, passed, fails, metrics}; file, bytes and sha256 are taken
     from stage/holo/<slug>.holo. None is the kill switch (holo: null). ships: id -> {missingSince, follows}; source,
     modelKey and racksSha256 come from the ship file."""
     holo = None
@@ -64,6 +64,10 @@ def read(path: Path) -> dict:
         raise ManifestError(f'{path}: required fields missing: {", ".join(missing)}')
     if m['schemaVersion'] != SCHEMA_VERSION:
         raise ManifestError(f'{path}: schemaVersion {m["schemaVersion"]}, this pipeline writes {SCHEMA_VERSION}')
+    # F1 (T12.1b): the judge's case 5 compares with the last release's fails.
+    no_fails = [s for s, e in sorted(((m['holo'] or {}).get('ships') or {}).items()) if not isinstance(e.get('fails'), list)]
+    if no_fails:
+        raise ManifestError(f'{path}: hologram entries without fails: {", ".join(no_fails[:8])}')
     return m
 
 

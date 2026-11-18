@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from conftest import TOOLS, catalog, grid, needs_pwsh, ship, write_json
+from conftest import CLEAN, TOOLS, catalog, grid, needs_pwsh, ship, write_json
 from shipdata import importer, stages
 
 OUTLINES = {'schemaVersion': 1, 'generatedAt': '2026-11-16T13:50:01Z', 'dataVersion': 'holo-v3', 'ships': [
@@ -41,7 +41,7 @@ def setup(tmp: Path) -> Path:
         (holo / f'{slug}.holo').write_bytes(slug.encode())
         entries.append({'slug': slug, 'file': f'{slug}.holo', 'bytes': len(slug), 'sha256': hashlib.sha256(slug.encode()).hexdigest(),
                         'model': cls, 'rawSha256': 'a' * 64, 'budget': 20000, 'triangles': 1, 'edges': [1, 1, 1],
-                        'passed': True, 'metrics': {}})
+                        'passed': True, 'metrics': dict(CLEAN)})
     write_json(holo / 'manifest.json', {'dataVersion': 'holo-v3', 'formatVersion': 2, 'ships': entries})
     root = tmp / 'root'
     root.mkdir()

@@ -77,36 +77,64 @@ def test_anchors_left_unset_stop() -> None:
     assert [f.stop for f in rules.import_findings([import_entry('x', 'same', anchors_kept=True)], {})] == [True]
 
 
-# Judge (Martin, 17.11.): only a turn for the worse stops. holo-v3 published 22 of 101 ships with passed=false, approved
-# on their contact sheet; an unchanged one of them must not open a PR every month.
-PASSED = {'passed': True, 'triangles': 21000, 'budget': 20000, 'fails': []}
-FAILED = {'passed': False, 'triangles': 39000, 'budget': 40000, 'fails': ['topHausdorff']}
+# Judge (SD5, replaces P9): a turn for the worse is a metric, not a flag. Each fixture lets exactly one case fire (lesson
+# of T12.1: a second check catching the same case keeps a broken rule green). The tests read the finding's fields (E1).
+A, B = 'TEST_A', 'TEST_B'
 
 
-def test_judge_passes_a_ship_in_its_budget() -> None:
-    assert rules.judge('test-a', PASSED, previous=None, new_model=True) is None
+def built(passed: bool, h: float, fails: list[str], triangles: int = 30000, budget: int = 40000) -> dict:
+    """PP.json of a newly built hologram: the judge's numbers at the top level."""
+    return {'passed': passed, 'fails': fails, 'triangles': triangles, 'budget': budget,
+            'topHausdorff': h, 'sideHausdorff': 0.001, 'frontHausdorff': 0.001}
 
 
-def test_judge_stops_a_ship_that_passed_before_and_fails_now() -> None:
-    f = rules.judge('test-a', FAILED, previous={'passed': True}, new_model=False)
-    assert f is not None and f.stop and 'topHausdorff' in f.detail
+def published(model: str, passed: bool, h: float, fails: list[str]) -> dict:
+    """holo.ships.<slug> of the last manifest."""
+    return {'model': model, 'passed': passed, 'fails': fails, 'triangles': 30000, 'budget': 40000,
+            'metrics': {'topHausdorff': h, 'sideHausdorff': 0.001, 'frontHausdorff': 0.001}}
 
 
-def test_judge_stops_a_new_ship_that_fails() -> None:
-    f = rules.judge('test-a', FAILED, previous=None, new_model=True)
-    assert f is not None and f.stop
+def test_judge_case_1_passed_turns_false() -> None:
+    f = rules.judge('test-a', built(False, 0.0055, ['hausdorff']), published(A, True, 0.0040, []), A)
+    assert f is not None and f.stop and f.data['cases'] == [1]
+    assert f.data['passed'] == {'old': True, 'new': False}
 
 
-def test_judge_stops_a_failed_ship_with_a_new_model() -> None:
-    f = rules.judge('test-a', FAILED, previous={'passed': False}, new_model=True)
-    assert f is not None and f.stop
+def test_judge_case_2_above_110_percent_of_the_budget() -> None:
+    f = rules.judge('test-a', built(True, 0.001, [], triangles=22001, budget=20000), published(A, True, 0.001, []), A)
+    assert f is not None and f.stop and f.data['cases'] == [2]
 
 
-def test_judge_only_notes_a_ship_published_failed_with_the_same_model() -> None:
-    f = rules.judge('test-a', FAILED, previous={'passed': False}, new_model=False)
-    assert f is not None and not f.stop
+def test_judge_case_3_hausdorff_worse_by_more_than_the_tolerance() -> None:
+    f = rules.judge('test-a', built(False, 0.0150, ['hausdorff']), published(A, False, 0.0124, ['hausdorff']), A)
+    assert f is not None and f.stop and f.data['cases'] == [3]
+    assert f.data['hausdorff'] == {'old': 0.0124, 'new': 0.0150, 'delta': 0.0026, 'tolerance': rules.HAUSDORFF_TOLERANCE}
 
 
-def test_judge_stops_a_ship_above_110_percent_of_its_budget() -> None:
-    f = rules.judge('test-a', dict(PASSED, triangles=22001), previous={'passed': True}, new_model=False)
-    assert f is not None and f.stop and '110' in f.detail
+def test_judge_case_3_within_the_tolerance_is_a_note() -> None:
+    f = rules.judge('test-a', built(False, 0.0148, ['hausdorff']), published(A, False, 0.0124, ['hausdorff']), A)
+    assert f is not None and not f.stop and f.data['cases'] == []
+
+
+def test_judge_case_4_a_new_ship_stops_even_when_it_passes() -> None:
+    f = rules.judge('test-a', built(True, 0.001, []), None, A)
+    assert f is not None and f.stop and f.data['cases'] == [4]
+
+
+def test_judge_case_4_a_change_of_source_stops_even_when_it_passes() -> None:
+    f = rules.judge('anvl-f7c', built(True, 0.001, []), published('fleetyards (holo-v1)', True, 0.0, []), A)
+    assert f is not None and f.stop and f.data['cases'] == [4]
+    assert f.data['model'] == {'old': 'fleetyards (holo-v1)', 'new': A}
+
+
+def test_judge_case_5_one_more_metric_failed() -> None:
+    f = rules.judge('test-a', built(False, 0.0129, ['hausdorff', 'iou']), published(A, False, 0.0124, ['hausdorff']), A)
+    assert f is not None and f.stop and f.data['cases'] == [5]
+    assert f.data['fails'] == {'old': ['hausdorff'], 'new': ['hausdorff', 'iou']}
+
+
+def test_judge_otherwise_a_note_also_for_a_reexported_failed_ship() -> None:
+    """A re-export (same className, new model hash) of a ship published with passed=false: comparable, a note."""
+    f = rules.judge('test-a', built(False, 0.0134, ['hausdorff']), published(A, False, 0.0124, ['hausdorff']), A)
+    assert f is not None and not f.stop and f.data['cases'] == []
+    assert rules.judge('test-b', built(True, 0.001, []), published(B, True, 0.001, []), B) is None

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 MISSING_STOP = 3            # more newly gone ships without base than this stop the run (TASKS.md, Martin 17.11.)
 BUDGET_SLACK = 1.1          # above 110 % of its budget step a hologram fails (judge in holo_mesh.py, run-all.ps1)
+HAUSDORFF_TOLERANCE = 0.0025    # SD5 case 3: about one judge pixel at 512 px (1 px ~ 0.002 of the length); measured T12.1b
+HAUSDORFF_KEYS = ('topHausdorff', 'sideHausdorff', 'frontHausdorff')
 
 
 @dataclass
@@ -13,6 +15,7 @@ class Finding:
     detail: str
     stop: bool
     proposal: dict | None = None
+    data: dict | None = None        # the finding as fields for verify.json and the PR text (E1); detail is for the log
 
 
 @dataclass
@@ -71,16 +74,48 @@ def import_findings(entries: list[dict], overrides: dict[str, dict]) -> list[Fin
     return out
 
 
-def judge(slug: str, pp: dict, previous: dict | None, new_model: bool) -> Finding | None:
-    """A newly built hologram (PP.json). Martin, 17 Nov (plan P9): only a turn for the worse stops - passed=false when the
-    last release had passed=true, the ship is new or got a new model. Above 110 % of the budget always stops. A ship
-    published with passed=false (holo-v3: 22, approved on the contact sheet) and the same model is a hint."""
-    if pp['triangles'] > BUDGET_SLACK * pp['budget']:
-        return Finding('judge', slug, f"{pp['triangles']} triangles, above 110 % of its budget {pp['budget']}", True)
-    if pp['passed']:
+def hausdorff(numbers: dict) -> float | None:
+    """The judge's Hausdorff distance: the worst of the three views, as holo_mesh.judge measures it (plan P4)."""
+    if not all(k in numbers for k in HAUSDORFF_KEYS):
         return None
-    fails = ', '.join(pp.get('fails', [])) or 'passed=false'
-    if previous is None or previous.get('passed') or new_model:
-        why = 'new ship' if previous is None else 'new model' if new_model else 'passed before'
-        return Finding('judge', slug, f'fails {fails} ({why})', True)
-    return Finding('judge', slug, f'fails {fails}, as published', False)
+    return max(numbers[k] for k in HAUSDORFF_KEYS)
+
+
+def judge(slug: str, pp: dict, previous: dict | None, class_name: str) -> Finding | None:
+    """A newly built hologram (PP.json) against its entry in the last manifest (SD5, replaces P9): a turn for the worse
+    is a metric, not a flag. The last hologram is comparable when it was built from the same className - a re-export is;
+    a new ship or a change of source (fleetyards (holo-v1) -> a Motherlode model) is not. Cases that stop:
+      1 passed turns false; 2 above 110 % of the budget; 3 both failed and Hausdorff worse by more than the tolerance;
+      4 no comparable hologram; 5 failed and a metric fails that did not before.
+    Otherwise a failed hologram is a note and a passed one nothing."""
+    comparable = previous is not None and previous.get('model') == class_name
+    old = previous or {}
+    new_h, old_h = hausdorff(pp), hausdorff(old.get('metrics') or {})
+    delta = round(new_h - old_h, 4) if new_h is not None and old_h is not None else None
+    fails, old_fails = list(pp.get('fails', [])), old.get('fails')
+    cases = []
+    if pp['triangles'] > BUDGET_SLACK * pp['budget']:
+        cases.append(2)
+    if not comparable:
+        cases.append(4)
+    elif old['passed'] and not pp['passed']:
+        cases.append(1)
+    elif not old['passed'] and not pp['passed']:
+        if set(fails) - set(old_fails):
+            cases.append(5)
+        if delta is not None and delta > HAUSDORFF_TOLERANCE:
+            cases.append(3)
+    if not cases and pp['passed']:
+        return None
+    cases.sort()
+    data = {'cases': cases, 'model': {'old': old.get('model'), 'new': class_name},
+            'passed': {'old': old.get('passed'), 'new': pp['passed']}, 'fails': {'old': old_fails, 'new': fails},
+            'hausdorff': {'old': old_h, 'new': new_h, 'delta': delta, 'tolerance': HAUSDORFF_TOLERANCE},
+            'triangles': {'old': old.get('triangles'), 'new': pp['triangles']},
+            'budget': {'old': old.get('budget'), 'new': pp['budget']}}
+    why = {1: 'passed turns false', 2: f"{pp['triangles']} triangles, above 110 % of its budget {pp['budget']}",
+           3: f'hausdorff worse by more than {HAUSDORFF_TOLERANCE}', 5: f"fails {', '.join(sorted(set(fails) - set(old_fails or [])))} now too",
+           4: 'new ship' if previous is None else f"no comparable hologram ({old.get('model')} -> {class_name})"}
+    detail = (('; '.join(f'SD5 case {c}: {why[c]}' for c in cases) or f"fails {', '.join(fails)}, comparable to the last release")
+              + (f'; hausdorff {old_h} -> {new_h} ({delta:+})' if delta is not None else ''))
+    return Finding('judge', slug, detail, bool(cases), data=data)
