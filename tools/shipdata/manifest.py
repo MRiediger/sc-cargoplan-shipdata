@@ -28,8 +28,9 @@ def data_files(stage: Path) -> list[str]:
 def build(stage: Path, *, data_version: str, generated_at: str, motherlode: dict, app_tag: str, pipeline_commit: str,
           tools: dict, holo_ships: dict[str, dict] | None, ships: dict[str, dict]) -> dict:
     """holo_ships: slug -> {model, rawSha256, budget, triangles, edges, passed, fails, metrics}; file, bytes and sha256 are taken
-    from stage/holo/<slug>.holo. None is the kill switch (holo: null). ships: id -> {missingSince, follows}; source,
-    modelKey and racksSha256 come from the ship file."""
+    from stage/holo/<slug>.holo. None is the kill switch (holo: null). ships: id -> {missingSince, follows, orderKeys}; source,
+    modelKey and racksSha256 come from the ship file; orderKeys (the catalog's grid order, SD2) from `ships` too, None when
+    the order is not known (a ship not written from a catalog yet)."""
     holo = None
     if holo_ships is not None:
         files = {p.stem: p for p in sorted((stage / 'holo').glob('*.holo'))} if (stage / 'holo').exists() else {}
@@ -44,7 +45,8 @@ def build(stage: Path, *, data_version: str, generated_at: str, motherlode: dict
         doc = json.loads(path.read_text(encoding='utf-8-sig'))
         extra = ships.get(path.stem, {})
         entries[path.stem] = {'source': doc.get('source'), 'modelKey': doc.get('modelKey'), 'racksSha256': racks_hash(doc),
-                              'missingSince': extra.get('missingSince'), 'follows': extra.get('follows')}
+                              'orderKeys': extra.get('orderKeys'), 'missingSince': extra.get('missingSince'),
+                              'follows': extra.get('follows')}
     return {'dataVersion': data_version, 'schemaVersion': SCHEMA_VERSION, 'generatedAt': generated_at,
             'builtFrom': {'motherlode': motherlode, 'appTag': app_tag, 'pipelineCommit': pipeline_commit, 'tools': tools},
             'files': {rel: sha256(stage / rel) for rel in data_files(stage)}, 'holo': holo, 'ships': entries}
@@ -68,6 +70,10 @@ def read(path: Path) -> dict:
     no_fails = [s for s, e in sorted(((m['holo'] or {}).get('ships') or {}).items()) if not isinstance(e.get('fails'), list)]
     if no_fails:
         raise ManifestError(f'{path}: hologram entries without fails: {", ".join(no_fails[:8])}')
+    bad_order = [s for s, e in sorted(m['ships'].items()) if 'orderKeys' not in e or not (
+        e['orderKeys'] is None or (isinstance(e['orderKeys'], list) and all(isinstance(k, str) for k in e['orderKeys'])))]
+    if bad_order:
+        raise ManifestError(f'{path}: orderKeys: {", ".join(bad_order[:8])} (each a list of strings or null)')
     return m
 
 

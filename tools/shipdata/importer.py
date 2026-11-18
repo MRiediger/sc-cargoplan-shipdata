@@ -37,15 +37,17 @@ def write_key_map(path: Path, key_map: dict[str, str]) -> Path:
 
 
 def run_import(catalog: Path, ships: Path, outlines: Path, model_map: Path, report: Path, key_map: dict[str, str],
-               create: bool = True, previous: Path | None = None) -> ImportResult:
+               create: bool = True, previous_order: Path | None = None) -> ImportResult:
+    """previous_order: id -> orderKeys of the last release (diff.order_map); the import then does not write a ship whose
+    same grids come in another order (status 'order')."""
     keys = write_key_map(report.with_name(report.stem + '-keys.csv'), key_map)
     args = [os.environ.get('PWSH', 'pwsh'), '-NoProfile', '-NonInteractive', '-File', str(SCRIPT), '-Catalog', str(catalog),
             '-ShipsFolder', str(ships), '-Outlines', str(outlines), '-ModelMap', str(model_map), '-Report', str(report),
             '-KeyMap', str(keys)]
     if create:
         args.append('-Create')
-    if previous:
-        args += ['-Previous', str(previous)]
+    if previous_order:
+        args += ['-PreviousOrder', str(previous_order)]
     if report.exists():
         report.unlink()
     # NO_COLOR: pwsh >= 7.2 then writes errors without ANSI escapes (about_ANSI_Terminals), readable in logs.

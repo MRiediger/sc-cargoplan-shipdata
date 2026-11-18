@@ -28,7 +28,7 @@ def build(s: Path, holo: dict | None) -> dict:
     return manifest.build(s, data_version='ships-2026.11', generated_at='2026-11-17T00:00:00Z',
                           motherlode={'gameBuild': '4.10.3-LIVE.1', 'updatedAt': '2026-11-12'}, app_tag='v0.5.1',
                           pipeline_commit='abc1234', tools={'python': '3.14.5'}, holo_ships=holo,
-                          ships={'alpha': {'missingSince': None, 'follows': None}})
+                          ships={'alpha': {'missingSince': None, 'follows': None, 'orderKeys': ['2x2x1@0.0,0.0,0.0']}})
 
 
 def test_the_manifest_hashes_every_file_and_checks_clean(tmp_path: Path) -> None:
@@ -77,4 +77,17 @@ def test_a_hologram_entry_without_fails_is_turned_down(tmp_path: Path) -> None:
     del m['holo']['ships']['test-alpha']['fails']
     manifest.write(s / 'manifest.json', m)
     with pytest.raises(manifest.ManifestError, match='without fails: test-alpha'):
+        manifest.read(s / 'manifest.json')
+
+
+def test_order_keys_are_written_and_checked_on_reading(tmp_path: Path) -> None:
+    s = stage(tmp_path)
+    m = build(s, HOLO)
+    assert m['ships']['alpha']['orderKeys'] == ['2x2x1@0.0,0.0,0.0']
+    m['ships']['alpha']['orderKeys'] = None                     # null: order not compared
+    manifest.write(s / 'manifest.json', m)
+    assert manifest.read(s / 'manifest.json')['ships']['alpha']['orderKeys'] is None
+    m['ships']['alpha']['orderKeys'] = '2x2x1@0.0,0.0,0.0'      # a string, not a list
+    manifest.write(s / 'manifest.json', m)
+    with pytest.raises(manifest.ManifestError, match='orderKeys: alpha'):
         manifest.read(s / 'manifest.json')

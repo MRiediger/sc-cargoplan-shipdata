@@ -30,6 +30,9 @@ def setup(tmp: Path) -> Path:
     subprocess.run([sys.executable, '-I', str(TOOLS / 'holo_mesh.py'), 'outlines-v2', str(tmp / 'empty-map.csv'),
                     str(write_json(tmp / 'raw-outlines.json', OUTLINES)), str(app / 'outlines' / 'ship-outlines.json'),
                     OUTLINES['generatedAt'], OUTLINES['dataVersion'], 'test-a', 'test-gone'], check=True, capture_output=True)
+    # The saved answers of the catalog the app was built from: the seed takes its orderKeys from them (--catalog).
+    write_json(tmp / 'first' / 'api.json', catalog([ALPHA, GONE]))
+    (tmp / 'first' / 'page-ships.json').write_text('[]', encoding='utf-8')
     r = importer.run_import(write_json(tmp / 'first.json', catalog([ALPHA, GONE])), app / 'ships',
                             app / 'outlines' / 'ship-outlines.json', tmp / 'map.csv', tmp / 'r.json',
                             {'TEST_A': 'test-a', 'TEST_G': 'test-gone'})
@@ -53,7 +56,7 @@ def setup(tmp: Path) -> Path:
 @needs_pwsh
 def test_a_catalog_without_changes_but_a_gone_ship_releases_with_missing_since(tmp_path: Path) -> None:
     root = setup(tmp_path)
-    steps = [('release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--out', str(tmp_path / 'seed')),
+    steps = [('release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--catalog', str(tmp_path / 'first'), '--out', str(tmp_path / 'seed')),
              ('fetch', '--saved', str(write_json(tmp_path / 'saved' / 'api.json', catalog([ALPHA])).parent)),
              ('diff', '--previous', str(tmp_path / 'seed')),
              ('build', '--data-version', 'holo-v3', '--generated-at', '2026-11-16T13:50:01Z'),
@@ -65,8 +68,11 @@ def test_a_catalog_without_changes_but_a_gone_ship_releases_with_missing_since(t
         assert r.returncode == 0, f'{args[0]}: {r.stdout[-3000:]}{r.stderr[-3000:]}'
         assert 'checked:' in r.stdout and 'found:' in r.stdout and 'to do:' in r.stdout
 
+    seed = json.loads((tmp_path / 'seed' / 'manifest.json').read_text(encoding='utf-8'))
+    assert seed['ships']['alpha']['orderKeys'] == ['2x2x1@0.3,0.0,0.0']
     d = json.loads((root / 'work' / 'diff.json').read_text(encoding='utf-8'))
     assert (d['ships']['changed'], d['ships']['new'], d['ships']['gone']) == ([], [], ['gone'])
+    assert (d['order'], d['orderNotCompared']) == ({'compared': 1, 'changed': []}, [])
     m = json.loads((root / 'out' / 'release' / 'manifest.json').read_text(encoding='utf-8'))
     assert m['ships']['gone']['missingSince'] == '2026-11-17'
     assert m['builtFrom']['motherlode']['gameBuild'] == '4.10.3-LIVE.13165946'
@@ -86,7 +92,7 @@ def test_a_gone_ship_back_in_the_catalog_loses_missing_since(tmp_path: Path) -> 
     (tmp_path / 'back' / 'page-ships.json').write_text('[]', encoding='utf-8')
     write_json(tmp_path / 'saved' / 'api.json', catalog([ALPHA]))
     write_json(tmp_path / 'back' / 'api.json', catalog([ALPHA, GONE]))
-    first = run(root, 'release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--out', str(tmp_path / 'seed'))
+    first = run(root, 'release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--catalog', str(tmp_path / 'first'), '--out', str(tmp_path / 'seed'))
     assert first.returncode == 0, first.stdout[-2000:] + first.stderr[-2000:]
     for saved, previous, today in (('saved', tmp_path / 'seed', '2026-11-17'), ('back', tmp_path / 'run1', '2026-12-01')):
         for args in (('fetch', '--saved', str(tmp_path / saved)), ('diff', '--previous', str(previous)),
@@ -110,7 +116,7 @@ def test_a_grid_without_transform_and_no_override_goes_to_the_pr_path(tmp_path: 
     (tmp_path / 'saved').mkdir()
     (tmp_path / 'saved' / 'page-ships.json').write_text('[]', encoding='utf-8')
     write_json(tmp_path / 'saved' / 'api.json', catalog([ALPHA, GONE, kept]))
-    assert run(root, 'release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--out', str(tmp_path / 'seed')).returncode == 0
+    assert run(root, 'release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--catalog', str(tmp_path / 'first'), '--out', str(tmp_path / 'seed')).returncode == 0
     for args in (('fetch', '--saved', str(tmp_path / 'saved')), ('diff', '--previous', str(tmp_path / 'seed')), ('build',)):
         assert run(root, *args).returncode == 0
     r = run(root, 'verify')

@@ -6,8 +6,9 @@
 #   - -KeyMap: a ship without file or base takes modelKey from the last release's className -> modelKey map, a className
 #     never seen gets className in lowercase with '-' for '_'; a ship without className is not written;
 #   - no anchors at the racks' middle: a new ship gets its anchors from the model's floor (second run, after its outline);
-#   - -Report writes every ship's status as JSON for verify.
-# Usage: pwsh tools/import-motherlode.ps1 -Catalog <catalog.json> [-Previous <older catalog.json>] [-ShipsFolder <folder>]
+#   - -Report writes every ship's status as JSON for verify, with the catalog's grid order (orderKeys);
+#   - -PreviousOrder: grid order compared with the last release's orderKeys, not an older catalog (T12.1b, SD2).
+# Usage: pwsh tools/import-motherlode.ps1 -Catalog <catalog.json> [-PreviousOrder <id -> orderKeys json>] [-ShipsFolder <folder>]
 #        [-Outlines <outlines.json>] [-ModelMap <model-map.csv>] [-KeyMap <className,modelKey csv>] [-Report <report.json>]
 #        [-Create]
 #   Writes every ship whose file differs from what the catalog gives; a ship already in sync stays byte for byte.
@@ -24,7 +25,7 @@
 #   -ModelMap writes id,className,modelKey,sx,sy,sz for every ship with a model and a file: the hologram pipeline
 #   (sc-ship-outlines) builds per model and names the files by slug.
 #   Not written, for a person to look at: grids that overlap (K1), a rack set or position that doesn't match the file,
-#   grids in another order than in -Previous. A ship with a grid without transform stays as it is (Fleetyards).
+#   the same grids in another order than in -PreviousOrder. A ship with a grid without transform stays as it is (Fleetyards).
 #   -Create writes ships that have no file yet: a variant takes its base ship's hologram and outline, any other ship the
 #   modelKey of -KeyMap (or derived from its className) and its anchors from that model's floor.
 #   A module (ships/modules) moves by what its ship's Rack 1 moved.
@@ -34,7 +35,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Catalog,
-    [string]$Previous,
+    [string]$PreviousOrder,
     # Default ships/ next to tools/, set below: Windows PowerShell 5.1 leaves $PSScriptRoot empty in parameter defaults.
     [string]$ShipsFolder,
     # Default outlines/ship-outlines.json next to tools/, for the same reason.
@@ -494,10 +495,11 @@ try {
     if ($KeyMap) {
         foreach ($row in @(Import-Csv -LiteralPath $KeyMap -Encoding UTF8)) { $Keys[[string]$row.className] = [string]$row.modelKey }
     }
-    $previousOrder = @{}
-    if ($Previous) {
-        foreach ($entry in @((Read-Catalog $Previous).ships)) {
-            $previousOrder[(Get-ShipId ([string]$entry.name))] = @($entry.grids | ForEach-Object { if ($null -ne $_.transform) { (ConvertFrom-Grid $_ 'previous').OrderKey } else { '' } })
+    # Not $previousOrder: names are case-insensitive, it would be the parameter $PreviousOrder.
+    $orderBefore = @{}
+    if ($PreviousOrder) {
+        foreach ($prop in @((Get-Content -LiteralPath $PreviousOrder -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties)) {
+            $orderBefore[[string]$prop.Name] = @($prop.Value | ForEach-Object { [string]$_ })
         }
     }
 
@@ -512,11 +514,14 @@ try {
     $reportEntries = [System.Collections.Generic.List[object]]::new()
     foreach ($id in $ids) {
         $result = Convert-Ship $entries[$id] $id $context
-        if ($previousOrder.ContainsKey($id) -and $result.Status -in 'updated', 'created', 'same') {
+        $now = $null
+        if ($result.Status -in 'updated', 'created', 'same') {
             $now = @($entries[$id].grids | ForEach-Object { if ($null -ne $_.transform) { (ConvertFrom-Grid $_ 'order').OrderKey } else { '' } })
-            $before = $previousOrder[$id]
+        }
+        if ($orderBefore.ContainsKey($id) -and $null -ne $now) {
+            $before = $orderBefore[$id]
             if (($now -join ' ') -ne ($before -join ' ') -and ((@($now | Sort-Object) -join ' ') -eq (@($before | Sort-Object) -join ' '))) {
-                $result.Status = 'order'; $result.Detail = 'same grids as the previous catalog in another order: which rack is which? (not written)'
+                $result.Status = 'order'; $result.Detail = 'same grids as the last release in another order: which rack is which? (not written)'
                 $result.Text = $null; $result.Module = $null
             }
         }
@@ -526,7 +531,7 @@ try {
         }
         $counts[$result.Status]++
         $reportEntries.Add([ordered]@{ id = $id; status = $result.Status; detail = $result.Detail; className = $result.ClassName
-            modelKey = $result.Slug; shift = $result.Shift; anchorsKept = [bool]$result.AnchorsKept })
+            modelKey = $result.Slug; shift = $result.Shift; anchorsKept = [bool]$result.AnchorsKept; orderKeys = $now })
         $statusLines.Add(('{0,-10} {1,-30} {2}' -f $result.Status, $id, $result.Detail))
         foreach ($line in $result.Lines) { $detailLines.Add($line) }
         if ($result.Status -in 'updated', 'created', 'same') {
@@ -540,7 +545,7 @@ try {
         if (-not $entries.Contains($path.BaseName)) {
             $statusLines.Add(('{0,-10} {1,-30} {2}' -f 'absent', $path.BaseName, 'not in the catalog, stays as it is'))
             $reportEntries.Add([ordered]@{ id = $path.BaseName; status = 'absent'; detail = 'not in the catalog, stays as it is'
-                className = $null; modelKey = $null; shift = $null; anchorsKept = $false })
+                className = $null; modelKey = $null; shift = $null; anchorsKept = $false; orderKeys = $null })
         }
     }
 
@@ -563,7 +568,7 @@ try {
     $detailLines
     ''
     (@($counts.Keys | ForEach-Object { "$($counts[$_]) $_" }) + "$anchorsKept anchors kept") -join ', '
-    if (-not $Previous) { 'no previous catalog given: grid order not compared' }
+    if (-not $PreviousOrder) { 'no previous order given: grid order not compared' }
 
     if ($counts.new -gt 0 -or $counts.handcheck -gt 0 -or $counts.order -gt 0 -or $anchorsKept -gt 0) {
         exit 1

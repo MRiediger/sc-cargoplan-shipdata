@@ -75,8 +75,21 @@ def derived_fails(e: dict) -> list[str]:
     return fails
 
 
+def seed_order_keys(entries: list[dict], ship_ids: list[str]) -> tuple[dict[str, list[str] | None], list[str]]:
+    """orderKeys of the seed from the import's report against the catalog v0.5.1 was built from (Martin, 18 Nov; the
+    import is the one implementation of OrderKey, plan P2). A ship the import would rewrite means the catalog is not that
+    one: stop. A ship not in it, or kept as it is (a grid without transform), gets null: order not compared."""
+    rewrite = sorted(e['id'] for e in entries if e['status'] in ('updated', 'created', 'handcheck', 'order'))
+    if rewrite:
+        raise ReleaseError(f'the catalog would rewrite {len(rewrite)} ship files ({", ".join(rewrite[:8])}): '
+                           'it is not the catalog these files were built from')
+    same = {e['id']: e['orderKeys'] for e in entries if e['status'] == 'same'}
+    keys = {sid: same.get(sid) for sid in sorted(ship_ids)}
+    return keys, [sid for sid, k in keys.items() if k is None]
+
+
 def seed(app: Path, holo_dir: Path, out: Path, *, app_tag: str, data_version: str, generated_at: str,
-         pipeline_commit: str, tools: dict) -> Seed:
+         pipeline_commit: str, tools: dict, order_keys: dict[str, list[str] | None] | None = None) -> Seed:
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(app / 'ships', out / 'ships')
@@ -94,7 +107,8 @@ def seed(app: Path, holo_dir: Path, out: Path, *, app_tag: str, data_version: st
     sources = {p.stem: json.loads(p.read_text(encoding='utf-8-sig')).get('source') for p in sorted((out / 'ships').glob('*.json'))}
     motherlode, others = motherlode_from_sources(sources)
     m = manifest.build(out, data_version=data_version, generated_at=generated_at, motherlode=motherlode, app_tag=app_tag,
-                       pipeline_commit=pipeline_commit, tools=tools, holo_ships=holo_ships, ships={})
+                       pipeline_commit=pipeline_commit, tools=tools, holo_ships=holo_ships,
+                       ships={sid: {'orderKeys': k} for sid, k in (order_keys or {}).items()})
     manifest.write(out / 'manifest.json', m)
     return Seed(out, motherlode, others, len(sources), len(holo_ships))
 

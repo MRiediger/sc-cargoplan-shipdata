@@ -112,24 +112,31 @@ def fetch_stage(p: Paths, log: Reporter, saved: Path | None, catalog_only: bool)
 
 # ---------------------------------------------------------------- diff
 
-def diff_stage(p: Paths, log: Reporter, previous: Path, previous_catalog: Path | None) -> int:
+def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
     m = manifest.read(previous / 'manifest.json')
     catalog = load_json(p.w('catalog.json'))
+    order = p.w('previous-order.json')
+    save_json(order, diff.order_map(m))
     ships = p.w('ships')
     if ships.exists():
         shutil.rmtree(ships)
     shutil.copytree(previous / 'ships', ships)
     r = importer.run_import(p.w('catalog.json'), ships, previous / 'outlines.json', p.w('model-map-1.csv'), p.w('import-1.json'),
-                            key_map(m), create=True, previous=previous_catalog)
+                            key_map(m), create=True, previous_order=order)
     absent = [e['id'] for e in r.entries if e['status'] == 'absent']
+    # Written from the catalog now, but the last release has no order for them (seed: not in the archive): not compared.
+    unchecked = sorted(e['id'] for e in r.entries if e['status'] in ('same', 'updated', 'created') and e['id'] in m['ships']
+                       and m['ships'][e['id']].get('orderKeys') is None)
+    compared = sum(1 for e in r.entries if e['status'] in ('same', 'updated', 'created', 'order') and e['id'] in m['ships']
+                   and e['id'] not in unchecked)
     changes = diff.compare_ships(previous / 'ships', ships, absent)
     chosen = set(holo_mesh.slug_models(holo_mesh.read_map(str(p.w('model-map-1.csv'))))[0].values())
     models = diff.model_changes((m.get('holo') or {}).get('ships') or {}, catalog, chosen)
     status = {s: sum(1 for e in r.entries if e['status'] == s) for s in sorted({e['status'] for e in r.entries})}
     nothing = not (changes.changed or changes.new or changes.gone or models.changed or models.new)
     save_json(p.w('diff.json'), {'previous': str(previous.resolve()), 'previousDataVersion': m['dataVersion'],
-                                 'previousCatalog': str(previous_catalog) if previous_catalog else None,
-                                 'ships': asdict(changes), 'models': asdict(models), 'import': {'rc': r.rc, 'status': status},
+                                 'order': {'compared': compared, 'changed': sorted(e['id'] for e in r.entries if e['status'] == 'order')},
+                                 'orderNotCompared': unchecked, 'ships': asdict(changes), 'models': asdict(models), 'import': {'rc': r.rc, 'status': status},
                                  'nothingChanged': nothing})
     for k in ('changed', 'new', 'gone'):
         log.num(f'diff.ships.{k}', len(getattr(changes, k)))
@@ -138,11 +145,12 @@ def diff_stage(p: Paths, log: Reporter, previous: Path, previous_catalog: Path |
     show = lambda xs: ', '.join(xs[:10]) + ('...' if len(xs) > 10 else '')
     log.say('diff', f"catalog {catalog['gameBuild']} ({catalog['updatedAt']}) against release {m['dataVersion']}: "
             f"{len(list((previous / 'ships').glob('*.json')))} ship files without stamps, {len(models.same) + len(models.changed) + len(models.without_url)} models"
-            + ('' if previous_catalog else '; grid order not compared (no previous catalog)'),
+            + "; grid order against the release's orderKeys",
             f"ships: {len(changes.changed)} changed ({show(changes.changed)}), {len(changes.new)} new ({show(changes.new)}), "
             f"{len(changes.gone)} gone ({show(changes.gone)}), {len(changes.same)} same; models: {len(models.changed)} changed "
             f"(re-export), {len(models.new)} new, {len(models.without_url)} without URL ({show(models.without_url)}), "
-            f"{len(models.unused)} unused ({show(models.unused)}); import {status}",
+            f"{len(models.unused)} unused ({show(models.unused)}); grid order compared for {compared} ships, "
+            f"{status.get('order', 0)} in another order, not compared for {len(unchecked)} ({show(unchecked)}); import {status}",
             'none: nothing changed' if nothing else 'build the changed and new models, then verify')
     return 0
 
@@ -202,8 +210,7 @@ def build_stage(p: Paths, log: Reporter, ship_ids: list[str], build_all: bool, d
                    env=dict(os.environ, HOLO_WORK=str(holo_work)), stdout=subprocess.DEVNULL)
     # Anchors: the import once more, now with the new models' floors.
     r2 = importer.run_import(Path(p.w('catalog.json')), p.w('ships'), p.w('outlines.json'), p.w('model-map-2.csv'),
-                             p.w('import-2.json'), key_map(m), create=True,
-                             previous=Path(d['previousCatalog']) if d.get('previousCatalog') else None)
+                             p.w('import-2.json'), key_map(m), create=True, previous_order=p.w('previous-order.json'))
     status = {s: sum(1 for e in r2.entries if e['status'] == s) for s in sorted({e['status'] for e in r2.entries})}
     save_json(p.w('build.json'), {'built': built, 'unavailable': unavailable, 'failed': failed, 'sharedSlugs': shared,
                                   'dataVersion': data_version, 'generatedAt': generated_at, 'import2': status})
@@ -282,6 +289,8 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
         findings.append(stop)
     findings += [rules.Finding('gone', sid, f'missing since {since}', False) for sid, since in sorted(gone.missing_since.items())]
     findings += [rules.Finding('variant', sid, f'gone, takes the data of {base} (racks were equal)', False) for sid, base in sorted(gone.follows.items())]
+    findings += [rules.Finding('order-unchecked', sid, 'order not compared: the last release has no orderKeys for it', False)
+                 for sid in d['orderNotCompared']]
     returned = rules.back(m['ships'], present)
     findings += [rules.Finding('back', sid, f'back in the catalog ({was}): missingSince and follows cleared, built and judged like any ship', False)
                  for sid, was in returned.items()]
@@ -320,9 +329,15 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
             shutil.copyfile(previous / e['file'], stage / 'holo' / f'{slug}.holo')
             holo_ships[slug] = {k: v for k, v in e.items() if k not in ('file', 'bytes', 'sha256')}
 
+    # orderKeys: the catalog's for a ship written from it in this run, otherwise the last release's (gone, kept, order).
+    written = {e['id']: e['orderKeys'] for e in entries if e['status'] in ('same', 'updated', 'created')}
+    order_keys = {sid: written[sid] if sid in written else (m['ships'].get(sid) or {}).get('orderKeys')
+                  for sid in sorted(q.stem for q in (stage / 'ships').glob('*.json'))}
     extra = {sid: {'missingSince': None, 'follows': None} for sid in returned}
     extra.update({sid: {'missingSince': since, 'follows': None} for sid, since in gone.missing_since.items()})
     extra.update({sid: {'missingSince': None, 'follows': base} for sid, base in gone.follows.items()})
+    for sid, k in order_keys.items():
+        extra.setdefault(sid, {})['orderKeys'] = k
     new_m = manifest.build(stage, data_version=b['dataVersion'], generated_at=b['generatedAt'],
                            motherlode={'gameBuild': catalog['gameBuild'], 'updatedAt': catalog['updatedAt']}, app_tag=app_tag,
                            pipeline_commit=pipeline_commit(), tools=tool_versions(),
@@ -385,15 +400,30 @@ def release_stage(p: Paths, log: Reporter, dry_run: bool) -> int:
     return 0
 
 
-def seed_stage(p: Paths, log: Reporter, app: Path, holo: Path, out: Path, app_tag: str, data_version: str,
-               generated_at: str) -> int:
+def seed_stage(p: Paths, log: Reporter, app: Path, holo: Path, catalog_raw: Path, out: Path, app_tag: str,
+               data_version: str, generated_at: str) -> int:
+    # orderKeys from the catalog v0.5.1 was built from (Martin, 18 Nov): the import against it on a copy of the ships.
+    api, page = fetch.load_saved(catalog_raw)
+    cat, _ = fetch.join(api, page)
+    save_json(p.w('seed-catalog.json'), cat)
+    ships = p.w('seed-ships')
+    if ships.exists():
+        shutil.rmtree(ships)
+    shutil.copytree(app / 'ships', ships)
+    r = importer.run_import(p.w('seed-catalog.json'), ships, app / 'outlines' / 'ship-outlines.json', p.w('seed-map.csv'),
+                            p.w('seed-import.json'), {}, create=False)
+    keys, unchecked = release.seed_order_keys(r.entries, [q.stem for q in sorted((app / 'ships').glob('*.json'))])
     s = release.seed(app, holo, out, app_tag=app_tag, data_version=data_version, generated_at=generated_at,
-                     pipeline_commit=pipeline_commit(), tools=tool_versions())
+                     pipeline_commit=pipeline_commit(), tools=tool_versions(), order_keys=keys)
     log.num('seed.ships', s.ships)
     log.num('seed.holos', s.holos)
-    log.say('release --seed', f'{app} (ships/, outlines/) and {holo} (holograms, manifest) into {out}',
+    log.num('seed.orderKeys', len(keys) - len(unchecked))
+    log.say('release --seed', f'{app} (ships/, outlines/), {holo} (holograms, manifest) and the catalog {catalog_raw} '
+            f'(grid order) into {out}',
             f"{s.ships} ship files, {s.holos} holograms; built from {s.motherlode['gameBuild']}, {s.motherlode['updatedAt']}; "
-            f"{len(s.other_sources)} ships of another source: {', '.join(f'{k} ({v})' for k, v in s.other_sources.items())}",
+            f"{len(s.other_sources)} ships of another source: {', '.join(f'{k} ({v})' for k, v in s.other_sources.items())}; "
+            f"orderKeys from {cat['gameBuild']} ({cat['updatedAt']}) for {len(keys) - len(unchecked)} ships, "
+            f"order not compared for {len(unchecked)} ({', '.join(unchecked)})",
             f'none: {out} is the last release for diff --previous')
     return 0
 

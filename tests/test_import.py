@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from conftest import FIXTURES, catalog, grid, needs_pwsh, ship, write_json
-from shipdata import importer
+from shipdata import importer, rules
 
 OUTLINES = {'schemaVersion': 1, 'generatedAt': 'x', 'dataVersion': 'x', 'ships': [
     {'slug': 'test-known', 'lengthM': 10, 'beamM': 5, 'heightM': 3, 'floorM': -2.5, 'outline': [[0, 0], [1, 0], [1, 1]]},
@@ -79,3 +79,41 @@ def test_a_ship_file_not_in_the_catalog_is_reported_absent(tmp_path: Path) -> No
     r = run(tmp_path, catalog([ship('Known', 'TEST_Known', [grid('a', [2, 2, 1], [0, 0, 0])])]), {'TEST_Known': 'test-known'},
             ships={'overlap_ship': FIXTURES / 'import' / 'ships' / 'overlap_ship.json'})
     assert r.by_id['overlap_ship']['status'] == 'absent'
+
+
+# Grid order (SD2): the import compares the catalog's grids with the last release's orderKeys (-PreviousOrder) and does not
+# write a ship whose same grids come in another order - saved plans name racks by id (app V1).
+TWO = [grid('a', [2, 2, 1], [0, 0, 0]), grid('b', [2, 2, 2], [3, 0, 0])]
+KEYS = ['2x2x1@0.0,0.0,0.0', '2x2x2@3.0,0.0,0.0']
+
+
+def order_run(tmp: Path, grids: list[dict], previous_order: dict | None) -> importer.ImportResult:
+    folder = tmp / 'ships'
+    folder.mkdir(exist_ok=True)
+    order = write_json(tmp / 'order.json', previous_order) if previous_order is not None else None
+    return importer.run_import(write_json(tmp / 'catalog.json', catalog([ship('Known', 'TEST_Known', grids)])), folder,
+                               write_json(tmp / 'outlines.json', OUTLINES), tmp / 'map.csv', tmp / 'report.json',
+                               {'TEST_Known': 'test-known'}, create=True, previous_order=order)
+
+
+@needs_pwsh
+def test_the_report_names_the_grid_order(tmp_path: Path) -> None:
+    assert order_run(tmp_path, TWO, None).by_id['known']['orderKeys'] == KEYS
+
+
+@needs_pwsh
+def test_the_same_grids_in_another_order_stop_and_leave_the_file(tmp_path: Path) -> None:
+    order_run(tmp_path, TWO, None)
+    before = (tmp_path / 'ships' / 'known.json').read_bytes()
+    r = order_run(tmp_path, TWO[::-1], {'known': KEYS})
+    assert r.by_id['known']['status'] == 'order', r.output
+    assert (tmp_path / 'ships' / 'known.json').read_bytes() == before
+    assert [(f.rule, f.stop) for f in rules.import_findings(r.entries, {})] == [('order', True)]
+
+
+@needs_pwsh
+def test_the_same_order_passes_quietly(tmp_path: Path) -> None:
+    order_run(tmp_path, TWO, None)
+    r = order_run(tmp_path, TWO, {'known': KEYS})
+    assert (r.rc, r.by_id['known']['status']) == (0, 'same'), r.output
+    assert rules.import_findings(r.entries, {}) == []

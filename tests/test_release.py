@@ -104,6 +104,22 @@ def test_seed_stops_on_a_holo_file_that_differs_from_its_manifest(tmp_path: Path
                      generated_at='x', pipeline_commit='x', tools={})
 
 
+def test_seed_order_keys_come_from_the_archive_and_are_null_for_ships_not_in_it() -> None:
+    """Martin, 18 Nov: the seed's orderKeys from the catalog v0.5.1 was built from; a ship not in it (another source) or
+    kept as it is (a grid without transform) has none: its order is not compared until a run writes it."""
+    entries = [{'id': 'a', 'status': 'same', 'orderKeys': ['2x2x1@0.0,0.0,0.0']}, {'id': 'kept', 'status': 'kept', 'orderKeys': None}]
+    keys, not_compared = release.seed_order_keys(entries, ['a', 'cyclone', 'kept'])
+    assert keys == {'a': ['2x2x1@0.0,0.0,0.0'], 'cyclone': None, 'kept': None}
+    assert not_compared == ['cyclone', 'kept']
+
+
+def test_seed_order_keys_stop_when_the_archive_would_rewrite_a_ship() -> None:
+    """The archive is then not the catalog the seed's ship files were built from."""
+    with pytest.raises(release.ReleaseError, match='b'):
+        release.seed_order_keys([{'id': 'a', 'status': 'same', 'orderKeys': []}, {'id': 'b', 'status': 'updated', 'orderKeys': []}],
+                                ['a', 'b'])
+
+
 def test_dry_run_lists_the_assets_and_leaves_the_model_cache_alone(tmp_path: Path) -> None:
     out = release.seed(app(tmp_path, {'a': MOTHERLODE}), holo(tmp_path, ['test-a']), tmp_path / 'stage', app_tag='v0.5.1',
                        data_version='ships-2026.11', generated_at='x', pipeline_commit='x', tools={})

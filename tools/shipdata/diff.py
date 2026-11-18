@@ -26,6 +26,12 @@ def racks_hash(ship: dict) -> str:
     return hashlib.sha256(json.dumps(ship.get('racks', []), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def order_map(manifest: dict) -> dict[str, list[str]]:
+    """id -> orderKeys of the last release, for the import's -PreviousOrder (SD2: the order is compared with the
+    manifest, not with an older catalog). Ships with null are left out: their order is not compared."""
+    return {sid: e['orderKeys'] for sid, e in sorted(manifest['ships'].items()) if e.get('orderKeys') is not None}
+
+
 def load(path: Path) -> dict:
     return json.loads(path.read_text(encoding='utf-8-sig'))
 
