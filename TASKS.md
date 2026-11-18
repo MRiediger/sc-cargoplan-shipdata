@@ -105,17 +105,39 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 
 - [x] Abnahme Martin (17.11.2026), Review im Master-Chat
 
-### [ ] T12.0 Doku
+### [x] T12.0 Doku (Plan freigegeben 18.11.2026 mit Korrektur K1, `docs/plans/T12.0-doku.md`)
 
-**Warum:** Zwei Repos brauchen einen gemeinsamen Vertrag, bevor Code entsteht; die Spike-Befunde müssen in den Plan.
-- `docs/decisions.md` hier: SD1 „Zwei Repos“ (Kontext, Gegenargument: zwei Arbeitsordner, Cross-Repo-Gate), SD2 Manifest-Format, SD3 Gate-Verfahren aus S12.0, SD4 Release-Reihe `ships-YYYY.MM[.N]`, Pre-Release aus, letzte zwei bleiben
-- `docs/manifest-format.md` (Felder aus S12.0 Frage 5, `schemaVersion`-Vertrag, `holo: null`). Zusätzlich zu `builtFrom.tools`: **`pipelineCommit`** (Git-SHA der Pipeline). Ohne ihn ist ein Holo nicht reproduzierbar; holo-v3 führt ihn schon (`e6943af`).
-- SD-Eintrag **„actions/cache und Fork-PRs“** (S12.0 E1) als eigene Entscheidung: Workflows aus Fork-PRs können den Cache des Default-Branch lesen. Optionen: Katalog nicht cachen, oder Fork-PR-Workflows abschalten. Gegenargument und Konsequenz wie bei SD1–SD4.
-- `TOOLS.md` bereinigt, Pins aus dem Spike bestätigt
-- **App:** D-Eintrag (nächste freie Nummer) „Ship data channel“ mit Zielbild, Verweis auf SD1–SD4; Phase-12-Abschnitt in `sc-cargoplan/TASKS.md` mit T12.3–T12.6; Kollision „P12 Look“ auflösen
-- Spike-Befunde in diesen Task-Schnitt einarbeiten (Reihenfolge, Gates, Anker-Umzug)
+**Warum:** Zwei Repos brauchen einen gemeinsamen Vertrag, bevor Code entsteht; die Befunde aus S12.0, T12.1 und dem T12.1-Review müssen in den Plan.
+- `docs/decisions.md` hier: **SD1–SD9** (zwei Repos, Manifest, Gate, Release-Reihe + Asset-Layout, Judge, verschwunden/Variante/wieder da, Cache und Fork-PRs, Pins, Lebenszeichen)
+- `docs/manifest-format.md` ratifiziert (SD2): `orderKeys`, `assets`, Holos flach, `holo.baseUrl` gestrichen
+- `CLAUDE.md`: Regeltabelle auf SD5/SD6, Manifest, Asset-Layout, Pins, Projektstruktur
+- `TOOLS.md` als Abschrift der Pins (K1); T12.1b neu; T12.2 ergänzt
+- **App:** D111 „Ship data channel“, Phase 12 in `sc-cargoplan/TASKS.md` mit T12.3–T12.6, „P12 Look“ → `K6.4-P12 Look`, Zeile „Netz“ mit Zugriff 3 ab v0.6.0 – Branch `docs/p12-channel`
+
+**Entscheidungen aus dem T12.1-Review (Martin, 18.11.):**
+- **D1** Judge-Regel: Verschlechterung heißt Metrik, nicht Flag → SD5 (ersetzt P9)
+- **D2** Grid-Reihenfolge: OrderKeys ins Manifest, `--previous-catalog` entfällt → SD2
+- **D3** Asset-Layout: `manifest.json` + `NOTICE.md` flach, `ships.zip`, `<slug>.holo` → SD4
+- **E1** Wiederauftauchen ist eine Regel → SD6
+
+**Präzisierung in der Planphase, ratifiziert durch Freigabe (18.11.):**
+1. **K1 – Pins maschinenlesbar, `TOOLS.md` bleibt Doku.** Mein Entwurf ließ `run.py` den App-Tag aus einer Markdown-Zeile lesen. Stattdessen `.python-version`, `.nvmrc` (gelesen von `setup-python`/`setup-node`), `tools/pins.json` (`appTag`, `runner`, `pwsh`); `run.py` und `tools/local-wsl.sh` lesen daraus; `tests/test_versions.py` prüft Tabelle gegen Quellen.
+2. `pwsh` steht zusätzlich in `pins.json` – sonst wäre `local-wsl.sh` seine einzige Quelle. Auf dem Runner kommt pwsh vom Image und wird nur gemessen.
+3. Der Test „Runner im YAML = `pins.json`“ kommt mit T12.2; vorher gibt es kein YAML.
+4. **F1:** `HAUSDORFF_TOLERANCE = 0.0025`, vorläufig, gemessen in T12.1b. **F2:** `K6.4-P12 Look`, nur dieses Vorkommen. **F3:** zusätzlich verfehlte Metrik bei `passed=false` → PR (Fall 5 in SD5).
+5. D111 auf Englisch, weil die App-`decisions.md` durchgehend Englisch ist.
+6. Die Korrektur steht im Plan, nicht in einer eigenen Datei.
+7. **Lesart von SD5 Fall 4:** „kein vergleichbarer Vorgänger“ gilt unabhängig von `passed` – jedes neue Schiff und jeder Quellwechsel geht einmal in den PR (so geht die F7C in den PR, wie D1 verlangt). Bitte im Review bestätigen.
 
 **Akzeptanz:** Freigabe aus dem Master-Chat; beide Repos zeigen dieselbe Task-Nummerierung und denselben Manifest-Vertrag.
+
+**T12.0 Befund (18.11.2026):** 0 API-Rufe, 0 Workflow-Läufe.
+- **Doku geprüft (A3):** GitHub „About releases“: bis zu **1 000** Assets je Release, je unter 2 GiB, keine Grenze für die Gesamtgröße – ein Limit gibt es also, D3 braucht 104. GitHub „Events that trigger workflows“: Cron in öffentlichen Repos nach 60 Tagen ohne Aktivität abgeschaltet (SD9, wörtlich zitiert). `setup-python` `python-version-file`, `setup-node` `node-version-file` (`.nvmrc`).
+- **Zahlen für SD5:** 22 Holos `passed=false`, alle verfehlen nur Hausdorff (0,0058 … 0,0931, Schwelle 0,005); 79 bestehen (max 0,0049). Judge-Silhouette 512 px → ein Pixel ≈ 0,002 der Länge.
+- **Pins (K1):** 5 Tests in `test_versions.py`; vorher rot (5 failed, `pins.json` fehlt); provoziert rot mit `.nvmrc` 24.16.1 (2 failed), `appTag` v0.5.0 (1 failed), hart kodiertem Python in `local-wsl.sh` (1 failed); zurückgesetzt grün.
+- **pytest komplett** (WSL, Pins): `69 passed in 19.44s` (65 aus T12.1 + 4 neue Pin-Tests; `test_tool_versions_match_the_pins` liest jetzt die Quellen statt Konstanten).
+
+- [ ] Abnahme im Master-Chat (beide Commits; Martin merged `docs/p12-channel` mit `--no-ff`)
 
 ### [x] T12.1 Pipeline – `run.py fetch · diff · build · verify · release` (Plan freigegeben 17.11.2026 mit Auflagen A–D, `docs/plans/T12.1-pipeline.md`)
 
@@ -285,16 +307,36 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins: Python 3.14.5, numpy 2.5.3, opencv-py
 8. **Gate-Skripte:** Sie liegen unverändert in `tools/gate/` (`say.sh`, `pictures.sh`, `swap.sh`, `csvdiff.py`). `spike.yml` ist gelöscht; der Gate-Job wird neu geschrieben.
 9. **`pytest`** läuft im Ketten-Job vor `fetch` (65 Tests, ≈ 20 s, braucht pwsh).
 
+### [ ] T12.1b Nachträge – Review-Entscheidungen als Code (eigene Session)
+
+**Warum:** D1, D2, D3 und E1 aus dem T12.1-Review (SD2, SD4, SD5, SD6) ändern Regeln und Release-Layout. T12.2 baut den Workflow auf dieses Layout, also kommt der Code vorher.
+- **Judge nach SD5** in `rules.py`: fünf PR-Fälle (true → false, > 110 % Budget, Hausdorff schlechter um mehr als `HAUSDORFF_TOLERANCE = 0.0025`, kein vergleichbarer Vorgänger, zusätzlich verfehlte Metrik), sonst Hinweis; ein Test je Fall
+- **Wieder da (E1, SD6):** Schiff wieder im Katalog → `missingSince` und `follows` `null`; Test
+- **OrderKeys (D2, SD2):** `manifest.py` schreibt und liest `ships.<id>.orderKeys`, `diff.py` vergleicht die Grid-Reihenfolge gegen das Manifest; `--previous-catalog` raus aus `run.py`, `stages.py` und der Import-Übergabe. Offen: der Seed (`release --seed`) hat keinen Katalog – `orderKeys` dort `null` mit Hinweis („order not compared for this ship“), oder aus dem Archiv vom 16.11. (= v0.5.1)? Entscheidung im T12.1b-Plan.
+- **Release-Layout (D3, SD4):** `release` schreibt `manifest.json`, `NOTICE.md`, `ships.zip` (`ships/**` + `outlines.json`) und `<slug>.holo` flach, Manifest mit `assets` und flachem `holo.ships.<slug>.file`; `diff --previous` liest Manifest + `ships.zip`
+- **Toleranz messen:** die 22 Schiffe mit `passed=false` mit den Modellen vom 17.11. bauen (lokal, WSL), Δ Hausdorff je Schiff hier eintragen, SD5 per Addendum bestätigen oder korrigieren
+
+**Akzeptanz:** `release --dry-run` zeigt das Layout (heute 104 Assets); `diff` gegen den Dry-Run-Ordner liefert weiter **1 geändert / 1 neu / 6 verschwunden**; jede neue Regel einmal provoziert rot; Toleranz gemessen und in SD5; `pytest tests` grün.
+
 ### [ ] T12.2 Workflow `ship-data.yml`
 
 **Warum:** Der Lauf ohne Martin. Alles, was heute Zuruf ist, steht danach im YAML oder in `run.py`.
 - cron `23 4 1 * *` + `workflow_dispatch` (Input `dry-run`), `permissions: contents: write, pull-requests: write`
 - Cache nach Modell-SHA (Katalog nicht im Cache, S12.0 E1), Secret nur im Fetch-Step
 - Diff → kein Unterschied: Lebenszeichen-Commit `state/last-run.json`, Ende
-- Gate-Job `windows-latest`: Checkout `sc-cargoplan` auf gepinntem Tag (in `TOOLS.md`), beide Stände im selben Job (S12.0 K1)
+- Gate-Job `windows-latest`: Checkout `sc-cargoplan` auf gepinntem Tag (`appTag` in `tools/pins.json`, SD8), beide Stände im selben Job (S12.0 K1)
 - Release-Pfad: `gh release create ships-YYYY.MM[.N]`, Assets, Hygiene (letzte zwei bleiben)
 - PR-Pfad: Branch `data/YYYY.MM`, Befund als PR-Text, Kontaktabzug als Artefakt; nach Merge Release aus dem Merge-Commit
 - ~~`spike.yml` und `spike/` löschen~~ – in T12.1 erledigt (Präzisierung 13); Gate-Skripte aus `tools/gate/`
+
+**Aus T12.1 und T12.0 (SD3–SD9):**
+- **Laufzeit:** Kette lokal ≈ 97 Modelle × 36 s ≈ 61 min (Cull 72 %) → Job-Timeout **≥ 90 min** oder Matrix; Modell-Cache bis zum Release ≈ 2 × 51 MB
+- **Exit-Code-Vertrag:** `verify` Exit 2 → PR-Pfad (`work/verify.json` ist der Befund, `work/overrides-proposed.json` kommt als Commit in den PR); `diff.json` mit `nothingChanged` → Lebenszeichen statt Release; `release` ohne `--dry-run` macht `gh release create` mit dem D3-Layout, danach `fetch.prune_models`
+- **PR-Text je Schiff** mit Judge-Befund (welcher SD5-Fall, Metriken alt/neu) und Kontaktabzug; sonst ist der Merge kein Urteil
+- **`gh release download`** des Vorgängers (Manifest + `ships.zip`) und Entpacken als `run.py`-Schritt, nicht im YAML
+- **Pins (SD8):** `setup-python` mit `python-version-file: .python-version`, `setup-node` mit `node-version-file: .nvmrc`; `runs-on` steht im YAML und in `tools/pins.json`, ein Test vergleicht beide; der Gate-Checkout nimmt `appTag` aus `pins.json` über `run.py`
+- **`state/last-run.json`** schreibt der Workflow in jedem Lauf (SD9)
+- **`pytest`** läuft im Ketten-Job vor `fetch`
 
 **Akzeptanz:** Dispatch ohne Änderung: grün, „nothing changed“, ein Commit in `state/`, kein Release. Dispatch mit provozierter Regel (Test-Override): PR mit Befund und Artefakt, kein Release. Dispatch mit provozierter Änderung an einem Schiff: Release `ships-2026.11-test` mit vollständigem Manifest, danach gelöscht. Martin hat drei Knöpfe gedrückt und keinen Befehl getippt.
 
@@ -302,7 +344,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins: Python 3.14.5, numpy 2.5.3, opencv-py
 
 **Warum:** Ohne Leser ist das Release wertlos.
 - Manifest-Check nach dem Velopack-Check (eine URL `…/releases/latest/download/manifest.json`), `schemaVersion`-Prüfung (unbekannt → „Ship data needs app update“)
-- Notice-Zeile mit Update/Skip, Download nur `ships/` + `outlines.json` + `manifest.json`, atomarer Tausch unter `%LocalAppData%\SC-CargoPlan\ships\<version>\`, Reload ohne Neustart
+- Notice-Zeile mit Update/Skip, Download nur `manifest.json` + `ships.zip` (`assets.ships`, SD4), Prüfung gegen `files`, atomarer Tausch unter `%LocalAppData%\SC-CargoPlan\ships\<version>\`, Reload ohne Neustart
 - Plan-Verträglichkeit: geänderter Rack-Satz → „re-plan recommended“
 - Settings „Ship data“ (`shipData.checkOnStartup`, `skippedVersion`), CLI `ships --version`
 - Netzzugriff 3 → eigener D-Eintrag (CLAUDE.md der App)
@@ -312,10 +354,10 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins: Python 3.14.5, numpy 2.5.3, opencv-py
 ### [ ] T12.4 App: Holo aus dem Manifest (im App-Repo)
 
 **Warum:** `HoloRelease.Tag` ist die letzte Konstante, die ein App-Release pro Datenänderung erzwingt.
-- Ort und Hashes aus dem Manifest, `holo: null` → Umriss-Fallback, gelöschtes Release → Baseline-Holo
+- Hashes aus dem Manifest, URL `…/releases/download/<dataVersion>/<file>` (kein `baseUrl`, SD2), `holo: null` → Umriss-Fallback, gelöschtes Release → Baseline-Holo
 - Cache-Wechsel nach D95-Muster, Migration für v0.5.x-Caches
 
-**Akzeptanz:** Bildvergleich gegen holo-v3 unter der Schwelle; Holo-Download aus `ships-*` statt `holo-v3`.
+**Akzeptanz:** Holo-Dateien aus `ships-*` byte-gleich zu holo-v3 (S12.0: Schwelle 0); Holo-Download aus `ships-*` statt `holo-v3`.
 
 ### [ ] T12.5 App: Baseline aus dem Release (im App-Repo)
 
@@ -351,6 +393,7 @@ Regeln aus Fehlern, die durchgerutscht sind. Gelten für jeden Task. Übernommen
 - **Handlauf ist ein Befund.** Anlass v0.5.1: ein halber Tag für drei Schiffe. Jeder Schritt, der einen Menschen braucht, bekommt eine Zeile hier, bis er weg ist.
 - **Kein Startprompt ohne Regeln.** Anlass 17.11.: Die erste CC-Session in diesem Repo lief ohne CLAUDE.md und TASKS.md und hat sich ihre Regeln selbst gegeben. Jedes neue Repo bekommt beide Dateien **vor** der ersten Session.
 - **Jede Regel einmal provozieren, nicht nur rot durch fehlenden Code.** Anlass 17.11. (T12.1): Zwei von 14 Tests blieben grün, obwohl die Regel kaputt war. Beim 404-Test fing die Hash-Prüfung denselben Fall ab; beim Key-Test glich der Alt-Key zufällig der Ableitung.
+- **Katalog-Rettung war Zeremonie.** Anlass 17.11. (T12.1): ein eigener Workflow, `openssl cms`-Verschlüsselung und ein Artifact, um einen Katalog aus dem Actions-Cache zu holen. Ein lokaler API-Ruf hätte dasselbe geliefert. Die Regel heißt „API **einmal pro Lauf**“, nicht „nie“: ein lokaler Ruf ist ein Lauf und billiger als jeder Rettungs-Workflow.
 - **Keine Logik in YAML-Schritten.** Anlass 17.11. (S12.0): zwei rote Läufe – ein ungepinntes Runner-Image und Inline-Code, der vor dem Runner nie gelaufen war. Workflow-Schritte rufen Skripte; die Skripte laufen vorher lokal in WSL Ubuntu 24.04 mit denselben Pins.
 
 ---
@@ -366,3 +409,4 @@ Kein Plan, sondern Reaktion: wird erst zum Task, wenn der Anlass eintritt.
 - **PAT für den PR-Pfad**, falls „Approve workflows to run“ bei jedem PR stört.
 - **Holo-Kill-Switch** (CIG oder Sciirof sagt Stopp): `holo: null` im nächsten Release, Assets der letzten zwei Releases löschen.
 - **Legenden-Warnzeilen** aus v0.5.1 – App-Thema, nicht hier (Verweis).
+- **WSL-Werkzeuge unter `/root` (fragil).** Anlass T12.1: der WSL-Standardbenutzer wechselte während der Session von `root` auf `artiniediger`; die Werkzeuge liegen unter `/root/s12tools`, `local-wsl.sh` läuft nur mit `wsl -u root` und braucht den `safe.directory`-Umweg. Reaktion, sobald es wieder hakt: Werkzeuge unter den Standardbenutzer (`SHIPDATA_TOOLS`) neu aufsetzen.

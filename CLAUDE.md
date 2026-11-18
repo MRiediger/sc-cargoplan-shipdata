@@ -44,18 +44,23 @@ ship-data.yml – cron `23 4 1 * *` + workflow_dispatch (dry-run)
   5  Regressions-Gate (windows-latest): Checkout sc-cargoplan auf gepinntem Tag,
      alter und neuer Datenstand im selben Job gerendert (ShipPictureTests),
      nur geänderte Schiffe dürfen abweichen
-  6  grün → Data-Release ships-YYYY.MM (ships/, outlines.json, Holos, manifest.json, NOTICE)
+  6  grün → Data-Release ships-YYYY.MM, Assets flach (SD4): manifest.json, NOTICE.md,
+     ships.zip (ships/** + outlines.json), <slug>.holo je Schiff
      Regel feuert → PR mit Befund + Kontaktabzug; Martins Merge = Freigabe → Release
-App: liest …/releases/latest/download/manifest.json, lädt ships/ + outlines.json + manifest.json,
-     Holos lazy pro Schiff aus dem Manifest. release.yml der App zieht beim Build die Baseline ins ZIP.
+App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.ships im Manifest),
+     Holos lazy pro Schiff aus …/releases/download/<dataVersion>/<slug>.holo.
+     release.yml der App zieht beim Build die Baseline ins ZIP.
 ```
 
-**Regeln als Code** (jede mit Test):
+**Regeln als Code** (jede mit Test; Begründung und Zahlen in `docs/decisions.md`):
 
 | Fall | Regel |
 |---|---|
-| Judge-Fail (z. B. Hausdorff) | nur bei Verschlechterung: neu gebautes Holo `passed=false` und im letzten Release `passed=true`, neu oder mit neuem Modell → kein Auto-Release, PR mit Metriken und Bild; > 110 % Budget immer. Mit `passed=false` veröffentlichte Schiffe (holo-v3: 22, Kontaktabzug) feuern bei gleichem Modell nicht (T12.1, P9) |
-| Schiff aus dem Katalog verschwunden | behalten, letzte Daten + Holo bleiben, `missingSince` im Manifest; nach 3 Läufen Backlog-Zeile |
+| Judge (SD5, ersetzt P9) | Verschlechterung heißt Metrik, nicht Flag. PR mit Metriken und Bild, wenn `passed` true → false kippt; > 110 % Budget; Hausdorff um mehr als `HAUSDORFF_TOLERANCE` (0,0025, vorläufig bis T12.1b) schlechter als der Vorgänger; kein vergleichbarer Vorgänger (neues Schiff, Quellwechsel); bei `passed=false` eine zusätzliche Metrik verfehlt. Sonst Hinweis, auch bei `passed=false` (holo-v3: 22 Schiffe, alle nur Hausdorff) |
+| Schiff aus dem Katalog verschwunden (SD6) | behalten, letzte Daten + Holo bleiben, `missingSince` im Manifest; nach 3 Läufen Backlog-Zeile. Mehr als **3** neu Verschwundene ohne Basis → PR |
+| Variante verschwunden (SD6) | Basis-`className` im Katalog und Racks im letzten Manifest hash-gleich zur Basis → `follows` die Basis; sonst wie verschwunden |
+| Schiff wieder da (SD6) | `missingSince` und `follows` → `null`, normal durch Diff, Build, Judge |
+| Grid-Reihenfolge geändert | `orderKeys` im Manifest gegen den Katalog; gleiche Grids in anderer Reihenfolge → nicht schreiben → PR (schützt gespeicherte Pläne, App-V1) |
 | Grid ohne Transform | Schiff bleibt auf seinem Stand – Eintrag in `overrides.json`, Hinweis |
 | überlappende Grids | nicht schreiben → PR |
 | Doppel-Modell nach Fetch | der Fetch räumt alte Hashes selbst weg |
@@ -69,36 +74,39 @@ App: liest …/releases/latest/download/manifest.json, lädt ships/ + outlines.j
 - **Schiffs-JSON:** Format in `sc-cargoplan/docs/ship-format.md`, `schemaVersion` aktuell 6 (`ShipLoader.SupportedSchemaVersion`; 4 und 5 liest die App noch) (Racks mit `origin`, `grid`, `stackAxis`, optional `rotation`; `modelKey`, `holoOrigin`, `outlineOrigin`). Koordinaten x Bug+, y Backbord+, z oben+, 1 Zelle = 1 SCU = 1,25 m. **Schema-Bump nur zusammen mit einem App-Release.**
 - **Umriss:** `outlines.json`, Meter, Ursprung unabhängig vom Rack-Nullpunkt, Zuordnung per `modelKey` (App-D90, D94).
 - **Holo:** Format SCH2 (`sc-cargoplan/docs/holo-format.md`), aus dem Motherlode-Modell: Flatten → Cull → Leiter 20k/30k/40k (meshoptimizer) → Export. CIG-Material: nie im Repo, nur Cache und Release-Asset, mit NOTICE; `holo: null` im Manifest ist der Kill-Switch.
-- **Anker:** heute in `sc-cargoplan/tools/import-motherlode.ps1`; zieht nach T12.1 hierher.
-- **Manifest** (`manifest.json` im Release): `dataVersion`, `schemaVersion`, `builtFrom {motherlode, appTag}`, `files {pfad: sha256}`, `holo {baseUrl, hashes} | null`, `ships {id: {source, missingSince}}`. Zähler und Herkunft je Schiff stehen **hier**, nicht in Extradateien.
+- **Anker:** `tools/import-motherlode.ps1` (seit T12.1 hier; die App-Kopie geht mit T12.5).
+- **Manifest** (`manifest.json` im Release, Format `docs/manifest-format.md`, ratifiziert mit SD2): `dataVersion`, `schemaVersion`, `generatedAt`, `builtFrom {motherlode {gameBuild, updatedAt}, appTag, pipelineCommit, tools}`, `assets {ships: "ships.zip"}`, `files {pfad im ZIP: sha256}`, `holo {formatVersion, ships {slug: {file, bytes, sha256, model, rawSha256, budget, …, passed, metrics}}} | null`, `ships {id: {source, modelKey, racksSha256, orderKeys, missingSince, follows}}`. Kein `holo.baseUrl`: die URL folgt aus `dataVersion`. Zähler und Herkunft je Schiff stehen **hier**, nicht in Extradateien.
 - **Lizenz:** Code MIT (`LICENSE`), Daten und Holos unter eigener `NOTICE.md` (CIG-Material, nicht MIT). Katalog, Modelle, Bilder, Erecs PDF nie committen.
 
 ## Technische Entscheidungen
 
 | Was | Entscheidung | Warum |
 |---|---|---|
-| Laufumgebung | **GitHub Actions**, `ubuntu-24.04` für die Kette (gepinnt: Python 3.14.5 gibt es für 26.04 = `ubuntu-latest` nicht, S12.0), `windows-latest` nur fürs Render-Gate | Kein eigener Server; Windows nur, wo WPF rendert. Kein Pin fürs Gate nötig: beide Stände entstehen im selben Job (S12.0 K1). |
+| Laufumgebung | **GitHub Actions**, `ubuntu-24.04` für die Kette (gepinnt: Python 3.14.5 gibt es für 26.04 = `ubuntu-latest` nicht, S12.0, SD8), `windows-latest` nur fürs Render-Gate | Kein eigener Server; Windows nur, wo WPF rendert. Kein Pin fürs Gate nötig: beide Stände entstehen im selben Job (SD3). |
 | Kette | **Python** (numpy, opencv-python-headless) + **Node** (meshoptimizer WASM) + **pwsh** für Anker/Import, ein Einstieg `run.py` mit Unterbefehlen `fetch · diff · build · verify · release` | Bestehender, bewährter Code aus `sc-ship-outlines`; kein Blender, keine GPU, kein Display. |
-| Pins | alles in `TOOLS.md`, Versionen exakt; `setup-python`/`setup-node` lesen daraus | Lokal = CI nur mit denselben Versionen; Abweichung ist ein Befund. |
-| Gate | **beide Stände im selben Job rendern**, Hash-exakt (`ShipPictureTests`), Schwelle nur für den Judge | Runner- und Plattform-Drift fallen per Konstruktion weg (S12.0 K1). |
-| Zustand | Manifest im Release + `state/last-run.json` im Repo | Kein Zustand in Dateien, die nur lokal existieren. |
-| Releases | **Pre-Release-Flag aus**, `releases/latest` ist immer das letzte Data-Release; letzte zwei bleiben | Die App braucht genau eine URL ohne API. |
+| Pins | **eine maschinenlesbare Quelle je Pin** (SD8): `.python-version`, `.nvmrc` (`setup-python`/`setup-node` per `*-version-file`), `tools/pins.json` (`appTag`, `runner`, `pwsh`), `requirements*.txt`, `package-lock.json`. `TOOLS.md` ist die Abschrift für Menschen, `tests/test_versions.py` prüft beide | Lokal = CI nur mit denselben Versionen; Abweichung ist ein Befund. Kein Parser für Markdown, keine Logik im YAML. |
+| Gate | **beide Stände im selben Job rendern**, Hash-exakt (`ShipPictureTests`), Schwelle nur für den Judge (SD3) | Runner- und Plattform-Drift fallen per Konstruktion weg (S12.0 K1). |
+| Zustand | Manifest im Release + `state/last-run.json` im Repo (SD9) | Kein Zustand in Dateien, die nur lokal existieren. |
+| Cache | nur Modelle nach SHA, **nie der Katalog** (SD7) | Fork-PR-Workflows können den Cache lesen. |
+| Releases | **Pre-Release-Flag aus**, `releases/latest` ist immer das letzte Data-Release; letzte zwei bleiben; Assets flach: `manifest.json`, `NOTICE.md`, `ships.zip`, `<slug>.holo` (SD4) | Die App braucht genau eine URL ohne API; GitHub-Assets können keine Ordner sein. |
 | PR-Pfad | `GITHUB_TOKEN`; CI auf dem PR startet erst nach Martins „Approve workflows to run“ | Kein PAT, solange zwei Klicks reichen. |
 | Lizenz | Code MIT, Daten NOTICE | Maximale Verbreitung des Codes, Rückziehbarkeit der Daten. |
 
-## Projektstruktur (Soll)
+## Projektstruktur (Ist nach T12.0; `ship-data.yml` und `state/` kommen mit T12.2)
 
 ```
 sc-cargoplan-shipdata/
 ├── CLAUDE.md · TASKS.md · TOOLS.md · README.md · LICENSE · NOTICE.md · SECURITY.md
+├── .python-version · .nvmrc       # Pins für setup-python / setup-node (SD8)
 ├── .github/workflows/
 │   └── ship-data.yml              # Monatslauf + Dispatch (T12.2)
 ├── tools/
 │   ├── run.py                     # Einstieg: fetch · diff · build · verify · release
-│   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, chain, stages, importer, compare, log
+│   ├── pins.json                  # appTag, runner, pwsh (SD8)
+│   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, release, chain, stages, importer, compare, log
 │   ├── holo_mesh.py · simplify.mjs                # Holo-Kette, byte-gleich zu holo-v3 (docs/provenance.md)
 │   ├── import-motherlode.ps1 · ShipJson.ps1   # Racks + Anker (aus dem App-Repo gezogen, T12.1)
-│   ├── gate/                      # Render-Gate-Skripte aus S12.0, für T12.2
+│   ├── gate/                      # Render-Gate-Skripte aus S12.0 (say, pictures, swap, csvdiff), für T12.2
 │   ├── local-wsl.sh               # WSL Ubuntu 24.04 mit den Pins: setup · test · run
 │   ├── requirements.txt · requirements-dev.txt · package.json · package-lock.json
 ├── overrides.json                 # Schiffe, die auf einem alten Stand bleiben (Grid ohne Transform)
@@ -118,7 +126,7 @@ Cache (`cache/`), Modelle (`*.glb`), Arbeitsordner, Bilder, PDFs und Kataloge si
 
 ```powershell
 python -I tools/run.py fetch [--saved <dir>] [--catalog-only]   # Katalog per API (einmal) oder aus gespeicherten Antworten; Modelle nach Hash
-python -I tools/run.py diff --previous <release-dir>            # gegen letztes Release: neu / geändert / verschwunden, Modelle separat
+python -I tools/run.py diff --previous <release-dir>            # gegen letztes Release (ab T12.1b: Manifest + ships.zip): neu / geändert / verschwunden, Modelle separat
 python -I tools/run.py build [--ship <id>] [--all]              # Flatten → Cull → Leiter → Export → Umriss → Anker
 python -I tools/run.py verify                                   # Regeln + Manifest + Hashes; Exit 2 = PR-Pfad
 python -I tools/run.py release --dry-run                        # Release-Inhalt zeigen, nichts hochladen

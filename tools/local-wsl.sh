@@ -4,8 +4,9 @@
 #   wsl -d Ubuntu-24.04 -- bash <repo in /mnt/c/...>/tools/local-wsl.sh setup        toolchain + pip + npm
 #   wsl -d Ubuntu-24.04 -- bash <repo in /mnt/c/...>/tools/local-wsl.sh test         pytest tests
 #   wsl -d Ubuntu-24.04 -- bash <repo in /mnt/c/...>/tools/local-wsl.sh run <args>   python -I tools/run.py <args>
-# Toolchain without sudo in $SHIPDATA_TOOLS (default ~/s12tools, the folder S12.0 set up): Python 3.14.5 (uv), numpy and
-# opencv from tools/requirements.txt, pytest from tools/requirements-dev.txt, Node 24.16.0, pwsh 7.6.10. Runs in place:
+# Toolchain without sudo in $SHIPDATA_TOOLS (default ~/s12tools, the folder S12.0 set up): Python (uv) from .python-version,
+# numpy and opencv from tools/requirements.txt, pytest from tools/requirements-dev.txt, Node from .nvmrc, pwsh from
+# tools/pins.json - the same sources the workflow reads (SD8). Runs in place:
 # work/, cache/ and out/ are the repo's (gitignored).
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -16,14 +17,17 @@ export PATH="$T/node/bin:$T/pwsh:$T/venv/bin:$PATH"
 # (git-config(1), GIT_CONFIG_COUNT, git >= 2.31).
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$REPO"
 cmd=${1:-test}; shift || true
+# One source per pin (SD8). Ubuntu's own python3 reads pins.json, since the pinned one may not be installed yet.
+PY=$(cat "$REPO/.python-version"); NODE=$(cat "$REPO/.nvmrc")
+PWSH=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["pwsh"])' "$REPO/tools/pins.json")
 
 setup() {
     mkdir -p "$T"; cd "$T"
     [ -x ~/.local/bin/uv ] || curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
-    ~/.local/bin/uv python install 3.14.5 2>&1 | tail -n 1
-    [ -d node ] || { curl -sSL https://nodejs.org/dist/v24.16.0/node-v24.16.0-linux-x64.tar.xz | tar xJ && mv node-v24.16.0-linux-x64 node; }
-    [ -d pwsh ] || { mkdir pwsh && curl -sSL https://github.com/PowerShell/PowerShell/releases/download/v7.6.10/powershell-7.6.10-linux-x64.tar.gz | tar xz -C pwsh && chmod +x pwsh/pwsh; }
-    [ -d venv ] || "$(~/.local/bin/uv python find 3.14.5)" -m venv venv
+    ~/.local/bin/uv python install "$PY" 2>&1 | tail -n 1
+    [ -d node ] || { curl -sSL "https://nodejs.org/dist/v$NODE/node-v$NODE-linux-x64.tar.xz" | tar xJ && mv "node-v$NODE-linux-x64" node; }
+    [ -d pwsh ] || { mkdir pwsh && curl -sSL "https://github.com/PowerShell/PowerShell/releases/download/v$PWSH/powershell-$PWSH-linux-x64.tar.gz" | tar xz -C pwsh && chmod +x pwsh/pwsh; }
+    [ -d venv ] || "$(~/.local/bin/uv python find "$PY")" -m venv venv
     venv/bin/python -m pip install -q --disable-pip-version-check -r "$REPO/tools/requirements.txt" -r "$REPO/tools/requirements-dev.txt"
     npm ci --prefix "$REPO/tools" --no-audit --no-fund --silent
 }

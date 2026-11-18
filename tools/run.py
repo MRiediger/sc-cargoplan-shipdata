@@ -11,6 +11,7 @@ Stages hand on through <root>/work (see shipdata/stages.py). Exit codes: 0 done,
 Every stage ends with checked / found / to do on the screen and in $GITHUB_STEP_SUMMARY."""
 import argparse
 import datetime as dt
+import json
 import sys
 from pathlib import Path
 
@@ -22,7 +23,8 @@ from shipdata import stages  # noqa: E402
 from shipdata.log import Reporter  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_TAG = 'v0.5.1'      # the app the gate renders with; pinned in TOOLS.md with T12.2
+# The app the gate renders with. One machine-readable source per pin (SD8): tools/pins.json; TOOLS.md is the copy.
+APP_TAG: str = json.loads((ROOT / 'tools' / 'pins.json').read_text(encoding='utf-8'))['appTag']
 
 
 def main(argv: list[str]) -> int:
