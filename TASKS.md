@@ -511,6 +511,11 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
    - `heartbeat`: `state/last-run.json` `result: pr`, Zeile **„PR #1: 2 findings“**; die `pr`-Zeilen sind jetzt im Heartbeat (Anker-Fix wirkt, `reports-pr/out/say-pr.jsonl`).
    - **Runner ↔ Runner:** alle 102 Holos byte-gleich zu Lauf 1, Bilder alt 1 427/1 427 und neu 1 440/1 440 gleich; Manifest-`files` nur in `outlines.json` (`generatedAt`) anders. Die 4 abweichenden Holos aus Befund 10 sind also maschinenabhängig, aber auf dem Runner reproduzierbar.
    - API-Rufe bisher: **2** (Lauf 1, Lauf 2).
+12. **Merge PR #1 → `publish-merged`, Lauf 44339569545 (18.11., 15:46 UTC): grün, 1 min 25 s.** https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44339569545
+   - Auslöser: Push des Merge-Commits `0a93d32` (`state/pending.json`); nur `publish-merged` und `heartbeat` liefen, die übrigen Jobs übersprungen. Martins Klicks bis hier: Einstellung SD12, Dispatch, Merge – kein „Approve workflows to run“ (P6 bestätigt).
+   - `publish`: Entwurf gegen Manifest und `pending.json` geprüft, **16 Kontaktabzüge entfernt**, veröffentlicht als `latest`, Ziel und Tag = Merge-Commit. Hygiene: 2 Releases (`ships-2026.11.1`, `ships-2026.11`), **0 gelöscht**. Prune: 0 alte Hashes, Cache **51 999 876 B** (101 Modelle).
+   - **Von außen ohne Anmeldung:** `…/releases/latest/download/manifest.json` HTTP 200, SHA `94129864f3ca` = `pending.json`; `ships.zip` 102 411 B, alle 111 Dateien gegen `files` gleich; `gama-hyun.holo` über `releases/download/ships-2026.11.1/` 268 668 B, SHA gleich. Release: **105 Assets, 32 748 772 B**, kein Entwurf, kein Pre-Release. Manifest: `dataVersion ships-2026.11.1`, `schemaVersion 6`, `pipelineCommit fadc771`, `missingSince 2026-11-18` für 600i Executive und Cyclone, 6 Varianten mit `follows`. https://github.com/MRiediger/sc-cargoplan-shipdata/releases/tag/ships-2026.11.1
+   - `heartbeat`: `state/pending.json` entfernt, `result: release`, Zeile **„Release ships-2026.11.1: 1 ship changed, 1 new, 8 gone, 91 holos refreshed“**. Der Bot-Push löste keinen Lauf aus (keine Schleife).
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 
