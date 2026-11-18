@@ -193,6 +193,10 @@ def test_unpack_stops_on_a_path_outside_the_folder(tmp_path: Path) -> None:
     assert not (tmp_path / 'escape.json').exists()
 
 
-def test_publishing_is_part_of_t12_2(tmp_path: Path) -> None:
-    with pytest.raises(release.ReleaseError, match='T12.2'):
-        release.publish(tmp_path, tmp_path / 'models')
+def test_release_only_packs_publishing_is_draft_and_publish() -> None:
+    """T12.2: run.py release is --dry-run or --seed; a release reaches GitHub only through run.py draft and publish
+    (shipdata.workflow), never from here."""
+    import run
+    assert not hasattr(release, 'publish')
+    with pytest.raises(SystemExit):
+        run.main(['release'])

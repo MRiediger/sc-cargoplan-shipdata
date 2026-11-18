@@ -400,7 +400,7 @@ def release_stage(p: Paths, log: Reporter, dry_run: bool) -> int:
     if problems:
         raise release.ReleaseError(f'stage differs from its manifest: {problems[:5]}')
     if not dry_run:
-        release.publish(stage, p.models)
+        raise release.ReleaseError('release publishes nothing: run.py draft and run.py publish do (T12.2)')
     assets = release.pack(stage, p.out / 'release', p.root / 'NOTICE.md')
     total, holos = sum(a.bytes for a in assets), [a for a in assets if a.name.endswith('.holo')]
     for a in assets:

@@ -7,7 +7,7 @@ sc-cargoplan@v0.5.1 and holo-v3 - so diff has a last release to compare with, an
 builtFrom.motherlode comes from the ships' "source" lines (condition D); the hologram entries, passed=false included, come
 over with fails derived from their metrics (F1), the orderKeys from the catalog the app's data was built from.
 --dry-run packs the stage and lists the assets; it never touches the model cache. Publishing, and with it cleaning older
-model hashes (condition B, fetch.prune_models), comes with the workflow in T12.2."""
+model hashes (condition B, fetch.prune_models), is workflow.draft_stage and workflow.publish_stage (T12.2)."""
 import hashlib
 import json
 import re
@@ -171,7 +171,3 @@ def unpack(release_dir: Path, into: Path) -> dict:
     if problems:
         raise ReleaseError(f'{archive} differs from its manifest: {problems[:5]}')
     return m
-
-
-def publish(stage: Path, models_dir: Path) -> None:
-    raise ReleaseError('publishing a release (gh release create, then fetch.prune_models) is part of T12.2; use --dry-run')

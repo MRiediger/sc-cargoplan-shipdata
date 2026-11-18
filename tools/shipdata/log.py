@@ -16,6 +16,15 @@ class Reporter:
             with open(summary, 'a', encoding='utf-8') as f:
                 f.write(f'### {step}\n- **checked:** {checked}\n- **found:** {found}\n- **to do:** {todo}\n\n')
 
+    def output(self, key: str, value: object) -> None:
+        """A step output for the workflow's conditions ($GITHUB_OUTPUT, key=value); nothing outside Actions. Values are
+        tags, hashes and words - never a secret."""
+        target = os.environ.get('GITHUB_OUTPUT')
+        if target:
+            with open(target, 'a', encoding='utf-8') as f:
+                f.write(f'{key}={value}\n')
+        print(f'  > {key} = {value}', flush=True)
+
     def num(self, key: str, value: object) -> None:
         with (self.out_dir / 'numbers.tsv').open('a', encoding='utf-8', newline='\n') as f:
             f.write(f'{key}\t{value}\n')
