@@ -388,7 +388,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 7. **T12.6:** Der Seed braucht das lokale Archiv vom 16.11. (A17, SD7) – das erste Release wird lokal in WSL gebaut (`cache/runs/seed` ist schon die Upload-Menge); der Upload-Weg muss das berücksichtigen.
 8. **`ships.zip` reproduzierbar:** gleicher Inhalt → gleiche Bytes bei gleichen Pins (zlib); über Plattformen hinweg nicht zugesagt, der Vertrag sind die Hashes in `files`.
 
-- [x] Akzeptanz erfüllt (18.11.2026); Abnahme Master-Chat steht aus.
+- [x] Abnahme Martin (18.11.2026), Review im Master-Chat.
 
 ### [ ] T12.2 Workflow `ship-data.yml`
 
