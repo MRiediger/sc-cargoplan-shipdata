@@ -105,7 +105,7 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 
 - [x] Abnahme Martin (17.11.2026), Review im Master-Chat
 
-### [x] T12.0 Doku (Plan freigegeben 18.11.2026 mit Korrektur K1, `docs/plans/T12.0-doku.md`)
+### [x] T12.0 Doku (Plan freigegeben 18.11.2026 mit Korrektur K1, `docs/plans/T12.0-doku.md`, abgenommen 18.11.2026)
 
 **Warum:** Zwei Repos brauchen einen gemeinsamen Vertrag, bevor Code entsteht; die Befunde aus S12.0, T12.1 und dem T12.1-Review müssen in den Plan.
 - `docs/decisions.md` hier: **SD1–SD9** (zwei Repos, Manifest, Gate, Release-Reihe + Asset-Layout, Judge, verschwunden/Variante/wieder da, Cache und Fork-PRs, Pins, Lebenszeichen)
@@ -127,7 +127,7 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 4. **F1:** `HAUSDORFF_TOLERANCE = 0.0025`, vorläufig, gemessen in T12.1b. **F2:** `K6.4-P12 Look`, nur dieses Vorkommen. **F3:** zusätzlich verfehlte Metrik bei `passed=false` → PR (Fall 5 in SD5).
 5. D111 auf Englisch, weil die App-`decisions.md` durchgehend Englisch ist.
 6. Die Korrektur steht im Plan, nicht in einer eigenen Datei.
-7. **Lesart von SD5 Fall 4:** „kein vergleichbarer Vorgänger“ gilt unabhängig von `passed` – jedes neue Schiff und jeder Quellwechsel geht einmal in den PR (so geht die F7C in den PR, wie D1 verlangt). Bitte im Review bestätigen.
+7. **Lesart von SD5 Fall 4:** „kein vergleichbarer Vorgänger“ gilt unabhängig von `passed` – jedes neue Schiff und jeder Quellwechsel geht einmal in den PR (so geht die F7C in den PR, wie D1 verlangt). **Bestätigt** (Martin, 18.11., Abnahme).
 
 **Akzeptanz:** Freigabe aus dem Master-Chat; beide Repos zeigen dieselbe Task-Nummerierung und denselben Manifest-Vertrag.
 
@@ -137,7 +137,7 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 - **Pins (K1):** 5 Tests in `test_versions.py`; vorher rot (5 failed, `pins.json` fehlt); provoziert rot mit `.nvmrc` 24.16.1 (2 failed), `appTag` v0.5.0 (1 failed), hart kodiertem Python in `local-wsl.sh` (1 failed); zurückgesetzt grün.
 - **pytest komplett** (WSL, Pins): `69 passed in 19.44s` (65 aus T12.1 + 4 neue Pin-Tests; `test_tool_versions_match_the_pins` liest jetzt die Quellen statt Konstanten).
 
-- [ ] Abnahme im Master-Chat (beide Commits; Martin merged `docs/p12-channel` mit `--no-ff`)
+- [x] Abnahme Martin (18.11.2026), Review im Master-Chat; Fall 4 bestätigt. App: `docs/p12-channel` gemerged als PR #27 (`61624c5`, `--no-ff`).
 
 ### [x] T12.1 Pipeline – `run.py fetch · diff · build · verify · release` (Plan freigegeben 17.11.2026 mit Auflagen A–D, `docs/plans/T12.1-pipeline.md`)
 
