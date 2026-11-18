@@ -504,6 +504,13 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
    - **Befund Determinismus:** Gleiche Modelle (alle `rawSha256` gleich), gleiche Pins, beide Ubuntu 24.04 – und **4 von 98 Holos nicht byte-gleich** zwischen WSL und Runner (600i Explorer/Touring, Apollo Medivac, Hermes; ±6–50 B, Metriken auf 4 Stellen gleich, eine `errorM` 0,1000 → 0,1006). Lokal waren genau diese 4 byte-gleich zu holo-v3 (11 statt 7). Vermutlich Gleitkomma je CPU (SIMD). Wirkung: nur bei geändertem Modell (sonst baut der Lauf nicht) zählen sie als „erneuert“, und die App lädt 4 Holos neu; das Gate erwartet sie über den Holo-SHA. Kein Stopp → Backlog. `outlines.json` unterscheidet sich nur in `generatedAt`.
    - Neue Bilder lokal ↔ Runner: 1 408 / 1 440 gleich, die übrigen gehören zu diesen 4 Schiffen.
    - Suite nach den Fixes: `171 passed in 95.26s`.
+11. **Dispatch 1, zweiter Anlauf – Lauf 44317285689 (18.11., 13:47 UTC): grün, PR-Pfad.** Einstellung aus SD12 von Martin eingeschaltet (`can_approve_pull_request_reviews: true`). https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44317285689
+   - `chain` **88 min**: 1 API-Ruf, 1 Seiten-GET, **0 Modell-GET** (Cache-Treffer 101/101 aus Lauf 1). `build` **5 167 s** (Lauf 1: 3 663 s, gleiche Arbeit – Runner-Streuung +41 %; Timeout 150 min hält). Gleicher Katalog, gleiche Stopps (F7C, `hyun`, Fall 4), 105 Assets.
+   - `gate` **11 min** grün: Build alt 39 s, Bildlauf alt 271 s, neu 228 s; 620 gleich, 820 anders, **0 unerwartet**, 16 Blätter.
+   - `pr` 26 s: **PR #1** auf `data/2026.11`, ein Commit, nur `state/pending.json` (Manifest `94129864f3ca`). https://github.com/MRiediger/sc-cargoplan-shipdata/pull/1 – Tabelle mit beiden Stopps und Metriken, Gate-Zeile, 31 Hinweise eingeklappt.
+   - `heartbeat`: `state/last-run.json` `result: pr`, Zeile **„PR #1: 2 findings“**; die `pr`-Zeilen sind jetzt im Heartbeat (Anker-Fix wirkt, `reports-pr/out/say-pr.jsonl`).
+   - **Runner ↔ Runner:** alle 102 Holos byte-gleich zu Lauf 1, Bilder alt 1 427/1 427 und neu 1 440/1 440 gleich; Manifest-`files` nur in `outlines.json` (`generatedAt`) anders. Die 4 abweichenden Holos aus Befund 10 sind also maschinenabhängig, aber auf dem Runner reproduzierbar.
+   - API-Rufe bisher: **2** (Lauf 1, Lauf 2).
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 
