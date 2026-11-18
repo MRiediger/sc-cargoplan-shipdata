@@ -1,0 +1,68 @@
+{
+ "date": "2026-11-18",
+ "runId": "44296781671",
+ "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44296781671",
+ "event": "workflow_dispatch",
+ "result": "error",
+ "line": "error in job pr: see the log",
+ "dataVersion": "ships-2026.11.1",
+ "previous": "ships-2026.11",
+ "counts": {
+  "changed": 1,
+  "new": 1,
+  "gone": 8,
+  "holosRefreshed": 91,
+  "findings": 2
+ },
+ "stages": [
+  {
+   "job": "chain",
+   "step": "fetch",
+   "checked": "catalog from cryon.rocks, saved to /home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/cache/catalogs/2026-11-18/raw; 101 model URLs against cache/models",
+   "found": "4.10.3-LIVE.13165946, updatedAt 2026-11-16T11:36:30.299Z, 101 ships, 101 with a model; models {'cached': 0, 'fetched': 101, 'unavailable': 0}; requests: 1 API call, 1 page GET, 101 model GET",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "previous",
+   "checked": "published data releases (1); ships-2026.11: every asset against its manifest",
+   "found": "ships-2026.11: 104 assets, 33112750 bytes, 101 holograms, ships.zip unpacked; this run releases as ships-2026.11.1",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "diff",
+   "checked": "catalog 4.10.3-LIVE.13165946 (2026-11-16T11:36:30.299Z) against release ships-2026.11: manifest.json and ships.zip checked, 108 ship files without stamps, 98 models; grid order against the release's orderKeys",
+   "found": "ships: 1 changed (f7c_hornet_mk_ii), 1 new (hyun), 8 newly gone (600i_executive_edition, carrack_expedition_w_c8x, carrack_w_c8x, cyclone, mole_carbon_edition, mole_talus_edition, mustang_alpha_vindicator, valkyrie_liberator_edition), 0 gone before (), 0 back (), 99 same; models: 96 changed (re-export), 2 new, 1 without URL (TMBL_Cyclone), 2 unused (ANVL_Carrack_Expedition, ORIG_135c); grid order compared for 98 ships, 0 in another order, not compared for 1 (f7c_hornet_mk_ii); import {'absent': 8, 'created': 1, 'kept': 1, 'updated': 99}",
+   "todo": "build the changed and new models, then verify"
+  },
+  {
+   "job": "chain",
+   "step": "build",
+   "checked": "98 models (changed and new): flatten, cull, ladder 20k/30k/40k, export, outline; outlines-v2 (4 entries kept); import with the new floors",
+   "found": "98 built in 3663 s, 0 without model (-), 0 failed; import {'absent': 8, 'kept': 1, 'same': 97, 'updated': 3}",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "verify",
+   "checked": "rules on 109 ships, 102 holograms, overrides.json (1 entries); manifest ships-2026.11.1 written and every file checked against it",
+   "found": "files equal to ships-2026.11: 4 / 111; rebuilt holograms byte-equal: 7 / 98, 0 models no longer available (-); 2 stops, 31 notes",
+   "todo": "PR path: judge anvl-f7c-hornet-mk-ii; judge gama-hyun"
+  },
+  {
+   "job": "chain",
+   "step": "draft",
+   "checked": "/home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/out/release against its manifest; draft ships-2026.11.1 (target fb8d87533a77), manifest.json uploaded last",
+   "found": "105 assets uploaded and checked against the manifest (manifest 695aa2952108); 0 drafts of earlier runs deleted (-)",
+   "todo": "none: the gate renders the draft; it is published only after a green gate (or a merged PR)"
+  },
+  {
+   "job": "gate",
+   "step": "gate",
+   "checked": "ships-2026.11 and ships-2026.11.1 rendered with the same app in one job (540 s); 96 ships expected to change (data without stamps, hologram, outline)",
+   "found": "620 pictures equal, 820 different, 0 missing, placement numbers differ for 26; unexpected: none; 16 contact sheets on draft ships-2026.11.1",
+   "todo": "none: publish or PR"
+  }
+ ]
+}
