@@ -21,7 +21,8 @@ From the private pipeline repo `sc-ship-outlines` at `25b4031` (the holo-v3 buil
 `package.json` still names the package `sc-ship-outlines`, and `requirements.txt` still carries a Windows comment
 (`.venv\Scripts\python`). Both stay as they are, since the files are byte-equal on purpose.
 
-The gate scripts for T12.2 are in `tools/gate/`, unchanged from `spike/`, which wrote them for S12.0:
+The gate scripts of S12.0 lay in `tools/gate/`, unchanged from `spike/`, until T12.2 ported them to
+`tools/shipdata/gate.py` and removed the folder (plan P5; see "Ported" below). Their hashes when they were removed:
 
 | File | SHA-256 |
 |---|---|
@@ -79,6 +80,8 @@ behaviour change 3 removes.
 | `tools/shipdata/compare.py` | `spike/compare.py` (`f6c192b6…`) | Pixel share and share > 8. SSIM is left out (S12.0 finding 4). |
 | `tools/shipdata/log.py` | `spike/say.sh` (`82403faa…`) | checked / found / to do, `numbers.tsv`. |
 | `tools/local-wsl.sh` | `spike/local-wsl.sh` (`a1f619ae…`) | Toolchain with the pins, then `run.py` in place. |
+| `tools/shipdata/gate.py` | `tools/gate/pictures.sh` (`b3a3bda0…`), `swap.sh` (`31c6e285…`), `csvdiff.py` (`0a321227…`) | T12.2: one ShipPictureTests run with the same environment variables and `dotnet test` arguments; the swap into the checkout, now with `bin/**/ships` emptied before the build and the whole bin copy checked (swap.sh checked one file); the CSV comparison keyed as `ShipPictureTests.Split`. |
+| `tools/shipdata/sheet.py` | `sc-ship-outlines/motherlode_sheet.py` (`aeb6af7`, `077b8189d747a8cd2953627b918056820e376ae755e9e6f4fac483b20fd9d831`) | T12.2: tile size, labels and picture lookup unchanged; one row per ship with old and new side by side, the gate's order (unexpected ships first, then stops), six ships to a sheet. |
 
 ## Test fixtures
 
