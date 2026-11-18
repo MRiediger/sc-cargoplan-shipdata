@@ -117,7 +117,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: reports-chain
+          # tools/pins.json in every report artifact: upload-artifact roots it at the common ancestor of the search
+          # paths, so an artifact of out/ paths alone would lose 'out/' (tests/test_workflow.py)
           path: |
+            tools/pins.json
             work/fetch.json
             work/previous.json
             work/diff.json
@@ -173,6 +176,7 @@ jobs:
         with:
           name: reports-gate
           path: |
+            tools/pins.json
             work/gate.json
             work/gate/pics/old/pictures.csv
             work/gate/pics/old/values.csv
@@ -229,6 +233,7 @@ jobs:
         with:
           name: reports-publish
           path: |
+            tools/pins.json
             out/numbers.tsv
             out/say-*.jsonl
           retention-days: 30
@@ -271,6 +276,7 @@ jobs:
         with:
           name: reports-pr
           path: |
+            tools/pins.json
             out/pr-body.md
             out/say-*.jsonl
           retention-days: 30
@@ -320,6 +326,7 @@ jobs:
         with:
           name: reports-publish-merged
           path: |
+            tools/pins.json
             out/numbers.tsv
             out/say-*.jsonl
           retention-days: 30

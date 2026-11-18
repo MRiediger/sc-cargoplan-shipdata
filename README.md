@@ -21,6 +21,10 @@ step calls `run.py`; a run ends with nothing changed, a release, or a PR:
 
 The draft release is where a run's assets wait (visible only with write access); artifacts carry reports only.
 
+Repository settings the run needs: secret `MOTHERLODE_API_KEY`; Settings > Actions > General > Workflow permissions >
+**Allow GitHub Actions to create and approve pull requests** (the PR path opens its PR with `GITHUB_TOKEN`, SD12);
+releases not immutable (the hygiene deletes old releases and their tags).
+
 ## The pipeline
 
 One entry point, `tools/run.py`, five stages. They hand on through `work/`:

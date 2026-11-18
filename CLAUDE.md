@@ -92,7 +92,7 @@ App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.s
 | Zustand | Manifest im Release + `state/last-run.json` im Repo (SD9) | Kein Zustand in Dateien, die nur lokal existieren. |
 | Cache | nur Modelle nach SHA, **nie der Katalog** (SD7) | Fork-PR-Workflows können den Cache lesen. |
 | Releases | **Pre-Release-Flag aus**, `releases/latest` ist immer das letzte Data-Release; letzte zwei bleiben; Assets flach: `manifest.json`, `NOTICE.md`, `ships.zip`, `<slug>.holo` (SD4); bis zur Veröffentlichung ein **Entwurf** als Ablage, Artefakte nur mit Berichten (SD10) | Die App braucht genau eine URL ohne API; GitHub-Assets können keine Ordner sein; CIG-Material nie in öffentlichen Artefakten. |
-| PR-Pfad | `GITHUB_TOKEN`; CI auf dem PR startet erst nach Martins „Approve workflows to run“ | Kein PAT, solange zwei Klicks reichen. |
+| PR-Pfad | `GITHUB_TOKEN` mit Repo-Einstellung „Allow GitHub Actions to create and approve pull requests“ (SD12); Martins Merge ist die Freigabe | Kein PAT, solange zwei Klicks reichen. |
 | Lizenz | Code MIT, Daten NOTICE | Maximale Verbreitung des Codes, Rückziehbarkeit der Daten. |
 
 ## Projektstruktur (Ist nach T12.2)

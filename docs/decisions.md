@@ -86,6 +86,14 @@ Architekturentscheidungen der Schiffsdaten-Pipeline mit ihren Abwägungen, numme
 - **Gegenargument:** `gate-red` und `error` sind Enden mit Arbeit für einen Menschen. Sie heißen aber, dass die Pipeline selbst falsch ist (ein Schiff anders, dessen Daten gleich sind; ein Absturz) – kein Urteil über Daten, das ein Merge treffen könnte.
 - **Konsequenz:** GitHub meldet den roten Lauf per Mail; der Entwurf bleibt zur Ansicht und wird vom nächsten Lauf ersetzt. Ein Gate-Job, der vor dem Bildvergleich scheitert (Build, Checkout), heißt `error`, nicht `gate-red`.
 
+## SD12 – PR aus dem Workflow: Repo-Einstellung statt PAT
+
+- **Kontext:** Dispatch 1 (Lauf 44296781671, 18.11.) brach in `gh pr create` ab. Die Repo-Einstellung **„Allow GitHub Actions to create and approve pull requests“** (Settings → Actions → General → Workflow permissions) war aus (`can_approve_pull_request_reviews: false`). Der Branch-Push mit `contents: write` ging durch, der PR nicht. In Block 10 nicht geprüft (nur Immutability) – Befund gegen die Probe.
+- **Optionen:** Einstellung an (der `GITHUB_TOKEN` öffnet den PR); PAT als Secret; GitHub App mit eigenem Schlüssel.
+- **Entscheidung:** Einstellung an – Vorschlag, Martins Klick in den Repo-Settings ratifiziert ihn. Passt zu „Kein PAT, solange zwei Klicks reichen“.
+- **Gegenargument:** Die Einstellung erlaubt jedem Workflow im Repo auch, PRs zu **approven**. Heute ohne Wirkung: Es gibt keine Branch-Protection mit Pflicht-Review, und der einzige Workflow ist `ship-data.yml`. Fork-PRs bekommen ohnehin nur einen Lese-Token. Kommt mit T12.6 Branch-Protection mit Reviews, ist das neu zu prüfen.
+- **Konsequenz:** README nennt die Einstellung als Voraussetzung. `gh`- und `git`-Fehler tragen jetzt die Meldung des Werkzeugs (stderr), damit `found` und `state/last-run.json` den Grund nennen statt „exit status 1“.
+
 ## SD9 – Lebenszeichen-Commit `state/last-run.json`
 
 - **Kontext:** GitHub-Doku („Events that trigger workflows“, `schedule`, geprüft 18.11.): „In a public repository, scheduled workflows are automatically disabled when no repository activity has occurred in 60 days.“ Ein Monatslauf ohne Änderung erzeugt kein Release und keinen Commit.

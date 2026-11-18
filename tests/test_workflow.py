@@ -5,6 +5,7 @@ plain block YAML written by hand; a test that needs a parser would be a new depe
   the Motherlode secret exactly once, as env of the fetch step (CLAUDE.md: secrets only where needed)
   every run: line calls run.py, pytest, pip or npm ci - no logic in YAML (lesson of S12.0)
   artifacts carry reports only: no catalog, ship files, holograms, pictures (A17, SD7, SD10)
+  every report artifact carries tools/pins.json, so it keeps the out/ and work/ layout
   every action is pinned in TOOLS.md with the same version (no new dependency without a pin)
   cron 23 4 1 * * (D3), permissions {} at the top, chain timeout >= 90 min (T12.1: full run ~61 min locally)"""
 import json
@@ -77,11 +78,14 @@ def test_every_run_line_calls_a_script() -> None:
     assert not any(l in ('run: |', 'run: >') for l in stripped)                # no multi-line scripts
 
 
-def test_artifacts_carry_reports_only() -> None:
-    paths = []
+def artifact_paths() -> dict[str, list[str]]:
+    """Artifact name -> the paths of its upload step."""
+    out: dict[str, list[str]] = {}
     for body in jobs().values():
         for s in steps(body):
             if any('actions/upload-artifact@' in l for l in s):
+                name = next(l.split(':', 1)[1].strip() for l in s if l.strip().startswith('name:'))
+                paths = out.setdefault(name, [])
                 block = False
                 for l in s:
                     if l.strip() == 'path: |':
@@ -90,9 +94,28 @@ def test_artifacts_carry_reports_only() -> None:
                         paths.append(l.strip())
                     else:
                         block = False
+    return out
+
+
+def test_artifacts_carry_reports_only() -> None:
+    paths = [p for ps in artifact_paths().values() for p in ps]
     assert paths
     bad = [p for p in paths if any(f in p for f in FORBIDDEN_IN_ARTIFACTS)]
     assert bad == [], bad
+
+
+ANCHOR = 'tools/pins.json'
+
+
+def test_every_report_artifact_keeps_the_repository_layout() -> None:
+    """upload-artifact (README, v7 has no root input): "the least common ancestor of all the search paths will be used
+    as the root directory". reports-pr and reports-publish* had search paths under out/ only, so 'out/' was cut off and
+    after the merged download the heartbeat missed that job's lines (run 44296781671: 'error in job pr: see the log').
+    tools/pins.json is a search path in every report artifact and exists after every checkout, so the root is always the
+    repository root - and the artifact records the pins the job ran with."""
+    found = artifact_paths()
+    assert found
+    assert [name for name, ps in found.items() if ANCHOR not in ps] == []
 
 
 def test_every_action_is_pinned_in_tools_md() -> None:
