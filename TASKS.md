@@ -390,7 +390,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 - [x] Abnahme Martin (18.11.2026), Review im Master-Chat.
 
-### [ ] T12.2 Workflow `ship-data.yml` (Plan freigegeben 18.11.2026 mit E1–E3, `docs/plans/T12.2-workflow.md`)
+### [x] T12.2 Workflow `ship-data.yml` (Plan freigegeben 18.11.2026 mit E1–E3, `docs/plans/T12.2-workflow.md`)
 
 **Warum:** Der Lauf ohne Martin. Alles, was heute Zuruf ist, steht danach im YAML oder in `run.py`.
 - cron `23 4 1 * *` + `workflow_dispatch` (Input `dry-run`), `permissions: contents: write, pull-requests: write`
@@ -429,7 +429,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Akzeptanz (D1):** Seed-Release `ships-2026.11` (104 Assets, `latest/download/manifest.json` = Seed-Manifest); Dispatch 1 → PR mit Befund je Stopp und Kontaktabzug am Entwurf; Merge → Release `ships-2026.11.1` aus dem Merge-Commit, zwei Releases bleiben; Dispatch 2 → „nothing changed“, Commit in `state/`, kein Release. Martin: zwei Dispatches, ein Merge, kein Befehl.
 
-**T12.2 Befund (laufend)**
+**T12.2 Befund**
 
 1. **Block 1 – `nothingChanged` (D2, P4).** `diff.split_gone` trennt neu Verschwundene von Schiffen, die im Vorgänger schon `missingSince`/`follows` hatten (`diff.json` `ships.gone` / `ships.stillGone`); `verify` gibt `rules.missing` beide Listen. `diff.nothing_changed` zählt zusätzlich `back`, geänderte Reihenfolge und Import-Stopps (`handcheck`, `kept` ohne `overrides.json`-Eintrag). Tests erst rot (**11 failed**), dann grün; ein bestehender Pipeline-Test prüfte das alte Verhalten und erwartet jetzt `stillGone` + `nothingChanged`. **5 Provokationen**, je rot: alte Zählung (3 rot) · `back` raus · Import-Stopps raus · Reihenfolge raus · `verify` ohne `stillGone` (Datum ginge verloren). Suite: `97 passed in 102.50s`.
 2. **Block 2 – Version und Hygiene.** `shipdata/workflow.py` (reine Funktionen: `version_key`, `next_version`, `pick_previous` nach Version statt `isLatest` (E1), `to_delete` behält die letzten zwei veröffentlichten, `stale_drafts`), `shipdata/github.py` (`gh`, `gh_json`, `git` – die einzige Stelle mit `subprocess` für GitHub). 11 Tests, vorher rot (Modul fehlt). **4 Provokationen**, je rot: Version als Text sortiert (5 rot) · Vorgänger über `isLatest` (1) · drei behalten (1) · Entwürfe als veröffentlicht gezählt (3).
@@ -516,6 +516,23 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
    - `publish`: Entwurf gegen Manifest und `pending.json` geprüft, **16 Kontaktabzüge entfernt**, veröffentlicht als `latest`, Ziel und Tag = Merge-Commit. Hygiene: 2 Releases (`ships-2026.11.1`, `ships-2026.11`), **0 gelöscht**. Prune: 0 alte Hashes, Cache **51 999 876 B** (101 Modelle).
    - **Von außen ohne Anmeldung:** `…/releases/latest/download/manifest.json` HTTP 200, SHA `94129864f3ca` = `pending.json`; `ships.zip` 102 411 B, alle 111 Dateien gegen `files` gleich; `gama-hyun.holo` über `releases/download/ships-2026.11.1/` 268 668 B, SHA gleich. Release: **105 Assets, 32 748 772 B**, kein Entwurf, kein Pre-Release. Manifest: `dataVersion ships-2026.11.1`, `schemaVersion 6`, `pipelineCommit fadc771`, `missingSince 2026-11-18` für 600i Executive und Cyclone, 6 Varianten mit `follows`. https://github.com/MRiediger/sc-cargoplan-shipdata/releases/tag/ships-2026.11.1
    - `heartbeat`: `state/pending.json` entfernt, `result: release`, Zeile **„Release ships-2026.11.1: 1 ship changed, 1 new, 8 gone, 91 holos refreshed“**. Der Bot-Push löste keinen Lauf aus (keine Schleife).
+13. **Dispatch 2 – Lauf 44340334581 (18.11., 15:50 UTC): grün, „nothing changed“, 2 min 04 s.** https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44340334581
+   - `chain` **91 s**: 1 API-Ruf, 1 Seiten-GET, 0 Modell-GET (101 im Cache); Katalog unverändert (`updatedAt 2026-11-16T11:36:30Z`). `previous`: `ships-2026.11.1` (höchste Version, 105 Assets gegen das Manifest geprüft).
+   - `diff`: 0 geändert, 0 neu, **0 neu verschwunden, 8 schon verschwunden** (D2 wirkt: `missingSince`/`follows` aus `.1` zählen nicht mehr), 0 wieder da, 0 Modelle geändert, Reihenfolge für 100 verglichen (F7C jetzt mit `orderKeys`), 0 vertauscht → `changed=false`.
+   - `build`, `verify`, Entwurf, `gate`, `publish`, `pr` übersprungen; Releases unverändert (`.1` latest, Seed).
+   - `heartbeat`: Commit `db15e0e` „data: heartbeat 2026-11-18 - nothing changed“, `result: nothing`.
+   - Suite zum Abschluss: `171 passed in 55.53s` (WSL, Pins).
+   - **API-Rufe in T12.2: 3** (Dispatch 1 zweimal, Dispatch 2) – Obergrenze aus D1 eingehalten, keiner aus der Session.
+
+**Akzeptanz (D1) erfüllt:** Seed `ships-2026.11` (Befund 8) · Dispatch 1 → PR #1 mit Befund je Stopp, Kontaktabzug am Entwurf (11) · Merge → `ships-2026.11.1` aus dem Merge-Commit, Hygiene 2 Releases (12) · Dispatch 2 → „nothing changed“, Lebenszeichen, kein Release (13).
+
+**Offen außerhalb dieses Tasks:** SD8-Addendum Dependabot wartet auf Bestätigung im Master-Chat; SD12 (Einstellung an) ist mit Martins Klick ratifiziert.
+
+**Das ändert sich an T12.3–T12.6:**
+1. **T12.3 (Datenkanal):** `releases/latest` ist **`ships-2026.11.1`**, ein echter Lauf – nicht der Seed. Die App sieht beim ersten Check sofort ein Update gegenüber v0.5.1: 1 Schiff neu (`hyun`), F7C mit Motherlode-Holo, 8 verschwundene mit `missingSince`/`follows` im Manifest. Die Akzeptanz am Aufzug testet damit einen echten Datensprung, kein Nullupdate. Das Manifest hat 111 Dateien in `files`, `ships.zip` 102 411 B.
+2. **T12.4 (Holo aus dem Manifest):** Akzeptanz „Holo-Dateien aus `ships-*` byte-gleich zu holo-v3“ gilt nur für den Seed `ships-2026.11`. In `.1` sind **91 Holos erneuert** (Motherlode-Re-Export). Neu: Holo-Datei byte-gleich zu `holo.ships.<slug>.sha256` des Manifests; der Vergleich mit holo-v3 nur gegen den Seed. Kontaktabzüge (`contact-sheet-*`) stehen nie im veröffentlichten Release (`publish` löscht sie) – die App darf keine Assets außer Manifest, `NOTICE.md`, `ships.zip`, `<slug>.holo` erwarten.
+3. **T12.5 (Baseline aus dem Release):** Mit dem Env-Override in `ShipPictureTests` (S12.0 E3) entfallen im Gate Tausch, `bin`-Leeren, Rebuild und Bin-Prüfung (`gate.swap`, `bin_problems`, ein Rebuild) – dann `appTag` in `tools/pins.json` auf das App-Release mit Override heben und `gate.py` vereinfachen. Die erwarteten Moduleinträge (`<schiff>_<modul>`) bleiben. Die App-Baseline wird `.1` (oder neuer), nicht der Seed: Die Bild-Baselines im App-Repo ändern sich für ~96 Schiffe.
+4. **T12.6 (Release):** „Erstes Data-Release `ships-2026.11` per Knopf“ und „erster echter Monatslauf per Knopf“ sind erledigt (Seed, Dispatch 1/2). Bleibt: App v0.6.0, Wiki, README beider Repos, `sc-ship-outlines` archivieren. Der Cron läuft seit T12.2 (D3), erster geplanter Lauf **1.12., 04:23 UTC** – **Sciirofs Freigabe für den Monatslauf steht weiter aus** (CLAUDE.md). Mit Branch + `--no-ff` ab T12.6: Branch-Protection mit Pflicht-Review macht SD12 neu prüfenswert, und `ci.yml` (Backlog) wird nötig.
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 
