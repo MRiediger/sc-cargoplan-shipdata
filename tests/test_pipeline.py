@@ -77,6 +77,33 @@ def test_a_catalog_without_changes_but_a_gone_ship_releases_with_missing_since(t
 
 
 @needs_pwsh
+def test_a_gone_ship_back_in_the_catalog_loses_missing_since(tmp_path: Path) -> None:
+    """SD6 "back": run 1 misses the ship (missingSince), run 2 against run 1's release finds it again (null)."""
+    root = setup(tmp_path)
+    (tmp_path / 'saved').mkdir()
+    (tmp_path / 'saved' / 'page-ships.json').write_text('[]', encoding='utf-8')
+    (tmp_path / 'back').mkdir()
+    (tmp_path / 'back' / 'page-ships.json').write_text('[]', encoding='utf-8')
+    write_json(tmp_path / 'saved' / 'api.json', catalog([ALPHA]))
+    write_json(tmp_path / 'back' / 'api.json', catalog([ALPHA, GONE]))
+    first = run(root, 'release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--out', str(tmp_path / 'seed'))
+    assert first.returncode == 0, first.stdout[-2000:] + first.stderr[-2000:]
+    for saved, previous, today in (('saved', tmp_path / 'seed', '2026-11-17'), ('back', tmp_path / 'run1', '2026-12-01')):
+        for args in (('fetch', '--saved', str(tmp_path / saved)), ('diff', '--previous', str(previous)),
+                     ('build', '--data-version', 'holo-v3', '--generated-at', '2026-11-16T13:50:01Z'),
+                     ('verify', '--today', today), ('release', '--dry-run')):
+            r = run(root, *args)
+            assert r.returncode == 0, f'{saved} {args[0]}: {r.stdout[-3000:]}{r.stderr[-3000:]}'
+        if saved == 'saved':
+            assert json.loads((root / 'out' / 'release' / 'manifest.json').read_text(encoding='utf-8'))['ships']['gone']['missingSince'] == '2026-11-17'
+            (root / 'out' / 'release').rename(tmp_path / 'run1')
+    m = json.loads((root / 'out' / 'release' / 'manifest.json').read_text(encoding='utf-8'))
+    assert (m['ships']['gone']['missingSince'], m['ships']['gone']['follows']) == (None, None)
+    found = json.loads((root / 'work' / 'verify.json').read_text(encoding='utf-8'))['findings']
+    assert [(f['rule'], f['id'], f['stop']) for f in found if f['rule'] == 'back'] == [('back', 'gone', False)]
+
+
+@needs_pwsh
 def test_a_grid_without_transform_and_no_override_goes_to_the_pr_path(tmp_path: Path) -> None:
     root = setup(tmp_path)
     kept = ship('Kept', None, [grid('k', [2, 2, 1], [0, 0, 0], transform=False)], sid=3)

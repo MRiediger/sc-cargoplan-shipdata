@@ -43,6 +43,15 @@ def test_more_than_three_newly_gone_without_base_stop_the_run() -> None:
     assert stop is not None and stop.stop and '4' in stop.detail
 
 
+def test_a_ship_back_in_the_catalog_is_named_with_what_it_was() -> None:
+    """SD6 "back": missingSince or follows in the last manifest, in the catalog again -> both are cleared."""
+    prev = {'f7c': dict(entry('anvl-f7c', 'r5', '2026-11-16'), follows=None),
+            'mole_carbon_edition': dict(entry('argo-mole', 'r1'), follows='mole'),
+            'mole': dict(entry('argo-mole', 'r1'), follows=None), 'cyclone': dict(PREV['cyclone'], follows=None)}
+    assert rules.back(prev, present={'f7c', 'mole_carbon_edition', 'mole'}) == {
+        'f7c': 'missing since 2026-11-16', 'mole_carbon_edition': 'followed mole'}
+
+
 def import_entry(sid: str, status: str, detail: str = '', anchors_kept: bool = False) -> dict:
     return {'id': sid, 'status': status, 'detail': detail, 'className': 'X', 'modelKey': 'x', 'anchorsKept': anchors_kept}
 

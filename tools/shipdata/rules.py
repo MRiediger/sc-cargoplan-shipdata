@@ -43,6 +43,20 @@ def missing(gone: list[str], previous: dict[str, dict], present: set[str], today
     return Missing(follows, since, newly)
 
 
+def back(previous: dict[str, dict], present: set[str]) -> dict[str, str]:
+    """Rule "back" (SD6, E1): a ship the last manifest had as gone (missingSince) or as a variant following its base
+    (follows), in the catalog again. Both fields are cleared; the ship goes through diff, build and judge like any other
+    (a change of source is judge case 4). Returns id -> what it was."""
+    out = {}
+    for sid in sorted(present & set(previous)):
+        p = previous[sid]
+        if p.get('missingSince'):
+            out[sid] = f"missing since {p['missingSince']}"
+        elif p.get('follows'):
+            out[sid] = f"followed {p['follows']}"
+    return out
+
+
 def too_many_gone(newly_without_base: list[str]) -> Finding | None:
     n = len(newly_without_base)
     if n <= MISSING_STOP:

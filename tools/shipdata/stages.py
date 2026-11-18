@@ -282,6 +282,9 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
         findings.append(stop)
     findings += [rules.Finding('gone', sid, f'missing since {since}', False) for sid, since in sorted(gone.missing_since.items())]
     findings += [rules.Finding('variant', sid, f'gone, takes the data of {base} (racks were equal)', False) for sid, base in sorted(gone.follows.items())]
+    returned = rules.back(m['ships'], present)
+    findings += [rules.Finding('back', sid, f'back in the catalog ({was}): missingSince and follows cleared, built and judged like any ship', False)
+                 for sid, was in returned.items()]
 
     stage = p.w('stage')
     if stage.exists():
@@ -317,7 +320,8 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
             shutil.copyfile(previous / e['file'], stage / 'holo' / f'{slug}.holo')
             holo_ships[slug] = {k: v for k, v in e.items() if k not in ('file', 'bytes', 'sha256')}
 
-    extra = {sid: {'missingSince': since, 'follows': None} for sid, since in gone.missing_since.items()}
+    extra = {sid: {'missingSince': None, 'follows': None} for sid in returned}
+    extra.update({sid: {'missingSince': since, 'follows': None} for sid, since in gone.missing_since.items()})
     extra.update({sid: {'missingSince': None, 'follows': base} for sid, base in gone.follows.items()})
     new_m = manifest.build(stage, data_version=b['dataVersion'], generated_at=b['generatedAt'],
                            motherlode={'gameBuild': catalog['gameBuild'], 'updatedAt': catalog['updatedAt']}, app_tag=app_tag,
