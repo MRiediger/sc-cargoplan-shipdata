@@ -131,15 +131,23 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
                        and m['ships'][e['id']].get('orderKeys') is None)
     compared = sum(1 for e in r.entries if e['status'] in ('same', 'updated', 'created', 'order') and e['id'] in m['ships']
                    and e['id'] not in unchecked)
-    changes = diff.compare_ships(data / 'ships', ships, absent)
+    newly_gone, still_gone = diff.split_gone(absent, m['ships'])
+    changes = diff.compare_ships(data / 'ships', ships, newly_gone + still_gone)
+    changes.gone = newly_gone
     chosen = set(holo_mesh.slug_models(holo_mesh.read_map(str(p.w('model-map-1.csv'))))[0].values())
     models = diff.model_changes((m.get('holo') or {}).get('ships') or {}, catalog, chosen)
     status = {s: sum(1 for e in r.entries if e['status'] == s) for s in sorted({e['status'] for e in r.entries})}
-    nothing = not (changes.changed or changes.new or changes.gone or models.changed or models.new)
+    back = sorted(rules.back(m['ships'], {e['id'] for e in r.entries if e['status'] != 'absent'}))
+    order_changed = sorted(e['id'] for e in r.entries if e['status'] == 'order')
+    overrides = {o['id'] for o in load_json(p.root / 'overrides.json')['ships']} if (p.root / 'overrides.json').exists() else set()
+    import_stops = sorted(e['id'] for e in r.entries
+                          if e['status'] == 'handcheck' or (e['status'] == 'kept' and e['id'] not in overrides))
+    nothing = diff.nothing_changed(changes, models, back, order_changed, import_stops)
     save_json(p.w('diff.json'), {'previous': str(previous.resolve()), 'previousData': str(data.resolve()),
                                  'previousDataVersion': m['dataVersion'],
-                                 'order': {'compared': compared, 'changed': sorted(e['id'] for e in r.entries if e['status'] == 'order')},
-                                 'orderNotCompared': unchecked, 'ships': asdict(changes), 'models': asdict(models), 'import': {'rc': r.rc, 'status': status},
+                                 'order': {'compared': compared, 'changed': order_changed},
+                                 'orderNotCompared': unchecked, 'ships': dict(asdict(changes), stillGone=still_gone, back=back),
+                                 'models': asdict(models), 'import': {'rc': r.rc, 'status': status, 'stops': import_stops},
                                  'nothingChanged': nothing})
     for k in ('changed', 'new', 'gone'):
         log.num(f'diff.ships.{k}', len(getattr(changes, k)))
@@ -150,11 +158,13 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
             f"manifest.json and {m['assets']['ships']} checked, {len(list((data / 'ships').glob('*.json')))} ship files without stamps, {len(models.same) + len(models.changed) + len(models.without_url)} models"
             + "; grid order against the release's orderKeys",
             f"ships: {len(changes.changed)} changed ({show(changes.changed)}), {len(changes.new)} new ({show(changes.new)}), "
-            f"{len(changes.gone)} gone ({show(changes.gone)}), {len(changes.same)} same; models: {len(models.changed)} changed "
+            f"{len(changes.gone)} newly gone ({show(changes.gone)}), {len(still_gone)} gone before ({show(still_gone)}), "
+            f"{len(back)} back ({show(back)}), {len(changes.same)} same; models: {len(models.changed)} changed "
             f"(re-export), {len(models.new)} new, {len(models.without_url)} without URL ({show(models.without_url)}), "
             f"{len(models.unused)} unused ({show(models.unused)}); grid order compared for {compared} ships, "
             f"{status.get('order', 0)} in another order, not compared for {len(unchecked)} ({show(unchecked)}); import {status}",
-            'none: nothing changed' if nothing else 'build the changed and new models, then verify')
+            'none: nothing changed' if nothing else
+            'build the changed and new models, then verify' + (f"; import stops: {show(import_stops)}" if import_stops else ''))
     return 0
 
 
@@ -287,7 +297,7 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
                  for sid in sorted(waiting)]
     findings += [f for f in rules.import_findings([e for e in entries if e['id'] not in waiting], overrides)]
     present = {e['id'] for e in entries if e['status'] != 'absent'}
-    gone = rules.missing(d['ships']['gone'], m['ships'], present, today)
+    gone = rules.missing(d['ships']['gone'] + d['ships']['stillGone'], m['ships'], present, today)
     stop = rules.too_many_gone(gone.newly_without_base)
     if stop:
         findings.append(stop)

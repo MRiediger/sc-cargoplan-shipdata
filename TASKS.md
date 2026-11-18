@@ -429,6 +429,10 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Akzeptanz (D1):** Seed-Release `ships-2026.11` (104 Assets, `latest/download/manifest.json` = Seed-Manifest); Dispatch 1 → PR mit Befund je Stopp und Kontaktabzug am Entwurf; Merge → Release `ships-2026.11.1` aus dem Merge-Commit, zwei Releases bleiben; Dispatch 2 → „nothing changed“, Commit in `state/`, kein Release. Martin: zwei Dispatches, ein Merge, kein Befehl.
 
+**T12.2 Befund (laufend)**
+
+1. **Block 1 – `nothingChanged` (D2, P4).** `diff.split_gone` trennt neu Verschwundene von Schiffen, die im Vorgänger schon `missingSince`/`follows` hatten (`diff.json` `ships.gone` / `ships.stillGone`); `verify` gibt `rules.missing` beide Listen. `diff.nothing_changed` zählt zusätzlich `back`, geänderte Reihenfolge und Import-Stopps (`handcheck`, `kept` ohne `overrides.json`-Eintrag). Tests erst rot (**11 failed**), dann grün; ein bestehender Pipeline-Test prüfte das alte Verhalten und erwartet jetzt `stillGone` + `nothingChanged`. **5 Provokationen**, je rot: alte Zählung (3 rot) · `back` raus · Import-Stopps raus · Reihenfolge raus · `verify` ohne `stillGone` (Datum ginge verloren). Suite: `97 passed in 102.50s`.
+
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 
 **Warum:** Ohne Leser ist das Release wertlos.

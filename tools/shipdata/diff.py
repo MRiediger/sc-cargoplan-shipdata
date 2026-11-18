@@ -62,6 +62,13 @@ def compare_ships(old_dir: Path, new_dir: Path, absent: list[str]) -> ShipChange
     return out
 
 
+def split_gone(absent: list[str], previous: dict[str, dict]) -> tuple[list[str], list[str]]:
+    """Ships not in the catalog, split by the last manifest (T12.2, D2): gone for the first time (a change) and gone
+    already - missingSince or follows set there (no change; verify carries the date or the base on)."""
+    still = sorted(s for s in absent if (previous.get(s) or {}).get('missingSince') or (previous.get(s) or {}).get('follows'))
+    return sorted(set(absent) - set(still)), still
+
+
 @dataclass
 class ModelChanges:
     same: list[str] = field(default_factory=list)
@@ -93,3 +100,14 @@ def model_changes(holo_ships: dict[str, dict], catalog: dict, chosen: set[str]) 
         else:
             out.changed.append(cls)
     return out
+
+
+def nothing_changed(changes: ShipChanges, models: ModelChanges, back: list[str], order_changed: list[str],
+                    import_stops: list[str]) -> bool:
+    """True when a run has nothing to release (heartbeat only, SD9). `changes.gone` holds the newly gone ships only
+    (split_gone). Besides changed, new and newly gone ships and changed or new models, these count (T12.2 P4): ships back
+    in the catalog (the manifest must clear missingSince / follows even if the file is the same), another grid order and
+    import stops (overlap, hand check, a grid without transform and no override) - the import writes no file for them,
+    so the files alone would look the same and the stop would vanish."""
+    return not (changes.changed or changes.new or changes.gone or models.changed or models.new or back or order_changed
+                or import_stops)

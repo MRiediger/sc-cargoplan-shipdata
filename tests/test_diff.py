@@ -71,3 +71,46 @@ def test_model_changes_are_counted_by_the_hash_in_the_model_url() -> None:
     # Expedition on 16 Nov). 'fleetyards (holo-v1)' names a source, not a model.
     m = diff.model_changes(holo, cat, chosen={'TEST_A', 'TEST_B', 'TEST_N'})
     assert (m.same, m.changed, m.new, m.without_url, m.unused) == (['TEST_A'], ['TEST_B'], ['TEST_N'], ['TEST_G'], ['TEST_V'])
+
+
+# ---------------------------------------------------------------- nothing changed (T12.2 D2, P4)
+
+import pytest  # noqa: E402
+
+PREVIOUS = {'cyclone': {'missingSince': '2026-11-16', 'follows': None},
+            'mole_carbon_edition': {'missingSince': None, 'follows': 'mole'},
+            'alpha': {'missingSince': None, 'follows': None}}
+
+
+def test_split_gone_counts_only_ships_newly_gone() -> None:
+    """Gone since the last release (missingSince or follows there) is no change; gone for the first time is (D2)."""
+    newly, still = diff.split_gone(['alpha', 'cyclone', 'mole_carbon_edition'], PREVIOUS)
+    assert (newly, still) == (['alpha'], ['cyclone', 'mole_carbon_edition'])
+
+
+def quiet() -> dict:
+    return dict(changes=diff.ShipChanges(same=['alpha']), models=diff.ModelChanges(same=['TEST_A']), back=[],
+                order_changed=[], import_stops=[])
+
+
+def test_nothing_changed_when_only_long_gone_ships_are_missing() -> None:
+    assert diff.nothing_changed(**quiet()) is True
+
+
+@pytest.mark.parametrize('what, value', [
+    ('changes', diff.ShipChanges(changed=['alpha'])),
+    ('changes', diff.ShipChanges(new=['fresh'])),
+    ('changes', diff.ShipChanges(gone=['alpha'])),
+    ('models', diff.ModelChanges(changed=['TEST_A'])),
+    ('models', diff.ModelChanges(new=['TEST_N'])),
+    ('back', ['cyclone']),
+    ('order_changed', ['alpha']),
+    ('import_stops', ['alpha']),
+])
+def test_each_change_counts(what: str, value: object) -> None:
+    """P4: back (the manifest must clear missingSince), another grid order and an import stop (overlap, hand check, a
+    grid without transform and no override) are changes too: the import writes no file for them, diff would see 'same'
+    and the stop would vanish in a heartbeat."""
+    args = quiet()
+    args[what] = value
+    assert diff.nothing_changed(**args) is False

@@ -92,7 +92,10 @@ def test_a_catalog_without_changes_but_a_gone_ship_releases_with_missing_since(t
     r = run(root, 'diff', '--previous', str(bare))
     assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-3000:]
     d = json.loads((root / 'work' / 'diff.json').read_text(encoding='utf-8'))
-    assert (d['ships']['changed'], d['ships']['new'], d['ships']['gone'], d['ships']['same']) == ([], [], ['gone'], ['alpha'])
+    # The release already has missingSince for the gone ship: gone before, not newly gone (D2) - nothing changed.
+    assert (d['ships']['changed'], d['ships']['new'], d['ships']['gone'], d['ships']['stillGone'], d['ships']['same']) == \
+           ([], [], [], ['gone'], ['alpha'])
+    assert d['nothingChanged'] is True
 
 
 @needs_pwsh
@@ -143,3 +146,28 @@ def test_a_gone_variant_takes_its_base_file_with_its_own_names() -> None:
     variant = '{\n  "schemaVersion": 6,\n  "id": "mole_carbon_edition",\n  "name": "ARGO MOLE Carbon Edition",\n  "modelKey": "argo-mole",\n  "source": "s1",\n  "totalScu": 96,\n  "racks": [0]\n}\n'
     out = stages.follow_base(variant, base)
     assert out == base.replace('"id": "mole"', '"id": "mole_carbon_edition"').replace('"name": "ARGO MOLE"', '"name": "ARGO MOLE Carbon Edition"')
+
+
+@needs_pwsh
+def test_a_ship_gone_since_the_last_release_is_no_change(tmp_path: Path) -> None:
+    """D2: run 1 misses the ship (missingSince), run 2 with the same catalog against run 1's release: nothing changed,
+    the ship counts as still gone, and verify keeps the date of the first miss."""
+    root = setup(tmp_path)
+    (tmp_path / 'saved').mkdir()
+    (tmp_path / 'saved' / 'page-ships.json').write_text('[]', encoding='utf-8')
+    write_json(tmp_path / 'saved' / 'api.json', catalog([ALPHA]))
+    first = run(root, 'release', '--seed', '--app', str(tmp_path / 'app'), '--holo', str(tmp_path / 'holo-v3'), '--catalog', str(tmp_path / 'first'), '--out', str(tmp_path / 'seed'))
+    assert first.returncode == 0, first.stdout[-2000:] + first.stderr[-2000:]
+    for previous, today in ((tmp_path / 'seed', '2026-11-17'), (tmp_path / 'run1', '2026-12-01')):
+        for args in (('fetch', '--saved', str(tmp_path / 'saved')), ('diff', '--previous', str(previous)),
+                     ('build', '--data-version', 'holo-v3', '--generated-at', '2026-11-16T13:50:01Z'),
+                     ('verify', '--today', today), ('release', '--dry-run')):
+            r = run(root, *args)
+            assert r.returncode == 0, f'{args[0]}: {r.stdout[-3000:]}{r.stderr[-3000:]}'
+        d = json.loads((root / 'work' / 'diff.json').read_text(encoding='utf-8'))
+        if previous.name == 'seed':
+            assert (d['ships']['gone'], d['ships']['stillGone'], d['nothingChanged']) == (['gone'], [], False)
+            (root / 'out' / 'release').rename(tmp_path / 'run1')
+    assert (d['ships']['gone'], d['ships']['stillGone'], d['nothingChanged']) == ([], ['gone'], True)
+    m = json.loads((root / 'out' / 'release' / 'manifest.json').read_text(encoding='utf-8'))
+    assert m['ships']['gone']['missingSince'] == '2026-11-17'
