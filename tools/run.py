@@ -4,11 +4,14 @@
   python -I tools/run.py previous [--today D]                       the last release (gh), and this run's release name
   python -I tools/run.py diff --previous <release dir>
   python -I tools/run.py build [--ship <id> ...] [--all] [--data-version V] [--generated-at T]
-  python -I tools/run.py verify [--app-tag T] [--today D]
+  python -I tools/run.py verify [--app-tag T] [--today D] [--ci]    --ci: exit 2 becomes 0, path=pr in $GITHUB_OUTPUT
+  python -I tools/run.py pins                                       appTag and runner (tools/pins.json) as step outputs
   python -I tools/run.py release --dry-run
   python -I tools/run.py release --seed --app <sc-cargoplan> --holo <holo release dir> --catalog <raw dir> [--out <dir>]
   python -I tools/run.py draft [--folder <release dir>] [--target SHA]  the draft release, manifest.json uploaded last
   python -I tools/run.py publish (--tag T | --pending state/pending.json) [--target SHA]
+  python -I tools/run.py gate --app <sc-cargoplan checkout> (--old-tag T | --old DIR) (--new-tag T | --new DIR)
+                                                                    render gate on Windows; contact sheets to --new-tag
   python -I tools/run.py pr --tag T [--dry-run]                     PR data/YYYY.MM with state/pending.json (merge = release)
   python -I tools/run.py heartbeat                                  state/last-run.json + commit (NEEDS = toJSON(needs))
 
@@ -26,12 +29,13 @@ from pathlib import Path
 # the package next to this file is added explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from shipdata import stages, workflow  # noqa: E402
+from shipdata import gate, stages, workflow  # noqa: E402
 from shipdata.log import Reporter  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 # The app the gate renders with. One machine-readable source per pin (SD8): tools/pins.json; TOOLS.md is the copy.
-APP_TAG: str = json.loads((ROOT / 'tools' / 'pins.json').read_text(encoding='utf-8'))['appTag']
+PINS: dict[str, str] = json.loads((ROOT / 'tools' / 'pins.json').read_text(encoding='utf-8'))
+APP_TAG: str = PINS['appTag']
 
 
 def run_id() -> str:
@@ -70,6 +74,8 @@ def main(argv: list[str]) -> int:
     v = sub.add_parser('verify')
     v.add_argument('--app-tag', default=APP_TAG)
     v.add_argument('--today', default=dt.date.today().isoformat(), help='date written as missingSince for newly gone ships')
+    v.add_argument('--ci', action='store_true', help='in the workflow: a fired rule is path=pr with exit 0 (P7)')
+    sub.add_parser('pins')
     r = sub.add_parser('release')
     mode = r.add_mutually_exclusive_group(required=True)
     mode.add_argument('--dry-run', action='store_true')
@@ -89,6 +95,14 @@ def main(argv: list[str]) -> int:
     which.add_argument('--tag')
     which.add_argument('--pending', type=Path, help='state/pending.json of a merged PR (P6)')
     pb.add_argument('--target', default=None, help='commit of the release (default GITHUB_SHA, else HEAD)')
+    g = sub.add_parser('gate')
+    g.add_argument('--app', type=Path, required=True, help='sc-cargoplan checked out at appTag (tools/pins.json)')
+    old = g.add_mutually_exclusive_group(required=True)
+    old.add_argument('--old-tag', help='the last release (gh release download)')
+    old.add_argument('--old', type=Path, help='a local release folder instead')
+    new = g.add_mutually_exclusive_group(required=True)
+    new.add_argument('--new-tag', help="this run's draft release; the contact sheets are uploaded to it")
+    new.add_argument('--new', type=Path, help='a local release folder instead (nothing uploaded)')
     pr = sub.add_parser('pr')
     pr.add_argument('--tag', required=True, help='the draft release the PR names')
     pr.add_argument('--dry-run', action='store_true', help='write out/pr-body.md only: no git, no gh')
@@ -107,6 +121,9 @@ def main(argv: list[str]) -> int:
             return workflow.draft_stage(p, log, a.folder, a.target or head())
         if a.cmd == 'publish':
             return workflow.publish_stage(p, log, a.tag, a.pending, a.target or head())
+        if a.cmd == 'gate':
+            return gate.gate_stage(p, log, a.app.resolve(), old_tag=a.old_tag, new_tag=a.new_tag, old_dir=a.old,
+                                   new_dir=a.new, upload_tag=a.new_tag)
         if a.cmd == 'pr':
             return workflow.pr_stage(p, log, a.tag, run_id(), run_url(), a.dry_run)
         if a.cmd == 'heartbeat':
@@ -118,8 +135,15 @@ def main(argv: list[str]) -> int:
             version = a.data_version or (json.loads(p.w('previous.json').read_text(encoding='utf-8'))['nextVersion']
                                          if p.w('previous.json').exists() else f'ships-{dt.date.today():%Y.%m}')
             return stages.build_stage(p, log, a.ship, a.all, version, a.generated_at)
+        if a.cmd == 'pins':
+            log.output('appTag', PINS['appTag'])
+            log.output('runner', PINS['runner'])
+            return 0
         if a.cmd == 'verify':
-            return stages.verify_stage(p, log, a.app_tag, a.today)
+            rc = stages.verify_stage(p, log, a.app_tag, a.today)
+            if rc in (0, 2):
+                log.output('path', 'pr' if rc == 2 else 'release')
+            return 0 if a.ci and rc == 2 else rc
         if a.seed:
             if not (a.app and a.holo and a.catalog):
                 ap.error('--seed needs --app, --holo and --catalog')

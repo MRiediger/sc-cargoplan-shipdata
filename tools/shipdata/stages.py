@@ -149,6 +149,7 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
                                  'orderNotCompared': unchecked, 'ships': dict(asdict(changes), stillGone=still_gone, back=back),
                                  'models': asdict(models), 'import': {'rc': r.rc, 'status': status, 'stops': import_stops},
                                  'nothingChanged': nothing})
+    log.output('changed', 'false' if nothing else 'true')
     for k in ('changed', 'new', 'gone'):
         log.num(f'diff.ships.{k}', len(getattr(changes, k)))
     for k in ('changed', 'new', 'without_url'):

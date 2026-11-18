@@ -458,6 +458,18 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
    - 9 Tests (Modul fehlte → rot). **8 Provokationen**, je rot: Kontaktabzug nur bei grünem Gate (Martins Fall) · erwartet nach Bytes (Stempel zählen) · Holo nur fürs eigene Schiff (3 rot) · Unerwartete nicht zuerst (2) · Bin nicht geprüft · fehlende Bilder nicht gezählt · neues Bild ohne Rückgriff aufs alte · Bin-Kopie nicht geleert (2). Bei der letzten blieb der Test zuerst grün, weil die Attrappe mit leerem `bin` startete: nachgeschärft (veraltete Datei in `bin`, wie bei einem schon gebauten Checkout).
    - **Lokaler Gate-Lauf** (Windows 11, SDK 10.0.404, App-Klon `v0.5.1` = `da48270` unter `cache/app-checkout`, Python 3.14.5 / numpy 2.5.3 / opencv 5.0.0.93): Seed `ships-2026.11` gegen den Dry-Run des Laufs vom 16.11. (`out/release`, gleiche Daten, nur Stempel anders). **0 Schiffe erwartet, 1 427 / 1 427 Bilder gleich, 0 anders, 0 fehlend, Platzierung 0 / 109 anders, grün.** Zeiten: Build 19,7 s + 2,5 s, Bildlauf alt 324,2 s, neu 170,1 s, gesamt **520 s**.
    - **Lokal ↔ Runner (Martins Hinweis, 18.11.):** Die Bild-Hashes des alten Laufs gegen S12.0-Lauf 3 A1 auf `windows-latest` (Artefakt `a1-csv`, nur Hashes, gleicher Stand v0.5.1 + holo-v3): **1 427 / 1 427 gleich, Platzierung 109 / 109 gleich.** Gleichheit ist damit gemessen, nicht nur erwartet.
+6. **Block 8 – `ship-data.yml`.**
+   - Jobs: `chain` (ubuntu-24.04, 150 min) → `gate` (windows-latest, 60 min, nur mit Entwurf) → `publish` oder `pr` (nur nach grünem Gate) · `publish-merged` (Push auf `state/pending.json`) · `heartbeat` (`always()`, nicht bei Dry-Run).
+   - `permissions: {}` oben, je Job das Nötige; `persist-credentials: false` überall, wo nichts gepusht wird; `GH_TOKEN` nur in Steps mit `gh`.
+   - Cache `models-<run>-<attempt>`, `restore-keys: models-`, nach `publish` geprunt unter `…-published`.
+   - Artefakte `reports-<job>` nur mit Berichten. Der Gate-Job lädt `pictures.csv`/`values.csv` beider Läufe mit hoch, damit sich lokal ↔ Runner jederzeit vergleichen lässt (wie oben gegen S12.0).
+   - Neu in `run.py`: `pins` (Outputs `appTag`, `runner`) und `verify --ci` (P7: Exit 2 → 0 mit `path=pr`); `diff` schreibt `changed`.
+   - **Doku geprüft (A3, 18.11.):** `upload-artifact` README – „the least common ancestor of all the search paths will be used as the root directory“ (die Suchpfade zählen, nicht die gefundenen Dateien; `work/` und `out/` bleiben); `if-no-files-found: ignore`. `download-artifact` README – `pattern`, `merge-multiple`. Was bei keinem Treffer passiert, sagt sie nicht: im `heartbeat` deshalb `continue-on-error`. Die Actions-Pins stehen in `TOOLS.md`.
+   - **`tests/test_workflow.py`** (7 Tests, zeilenweise, ohne YAML-Paket): Runner = `pins.json` · Secret genau einmal im Step `fetch` · jeder `run:` nur `run.py`/pytest/pip/npm, ohne Shell-Operatoren · Artefakte ohne Katalog/Schiffe/Holos/Bilder · Actions in `TOOLS.md` · Cron, `permissions: {}`, Timeout ≥ 90 · `publish`/`pr` nur nach grünem Gate. Dazu 5 Tests für `pins`/`--ci` und der Output `changed` im Ende-zu-Ende-Test.
+   - **Provokationen:** 12, je rot. **Zwei blieben zuerst grün** und haben den Test geschärft:
+     - (1) Ein `\1` hat den Weg PowerShell → WSL nicht überlebt und den Job gelöscht statt `runs-on` zu ändern – keine echte Provokation; neu über ein Python-Skript mit Argumentliste.
+     - (2) `verify || [ $? -eq 2 ]` begann mit einem erlaubten Präfix, und ein `- run:` am Schrittanfang wurde nicht gelesen – Testlücke. Jetzt sind Shell-Operatoren verboten und `- run:` wird gelesen.
+   - Suite: `164 passed in 107.98s`.
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 

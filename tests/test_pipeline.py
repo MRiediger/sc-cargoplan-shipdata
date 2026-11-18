@@ -149,9 +149,11 @@ def test_a_gone_variant_takes_its_base_file_with_its_own_names() -> None:
 
 
 @needs_pwsh
-def test_a_ship_gone_since_the_last_release_is_no_change(tmp_path: Path) -> None:
+def test_a_ship_gone_since_the_last_release_is_no_change(tmp_path: Path, monkeypatch) -> None:
     """D2: run 1 misses the ship (missingSince), run 2 with the same catalog against run 1's release: nothing changed,
-    the ship counts as still gone, and verify keeps the date of the first miss."""
+    the ship counts as still gone, and verify keeps the date of the first miss. diff tells the workflow (P7)."""
+    out = tmp_path / 'github-output'
+    monkeypatch.setenv('GITHUB_OUTPUT', str(out))
     root = setup(tmp_path)
     (tmp_path / 'saved').mkdir()
     (tmp_path / 'saved' / 'page-ships.json').write_text('[]', encoding='utf-8')
@@ -169,5 +171,7 @@ def test_a_ship_gone_since_the_last_release_is_no_change(tmp_path: Path) -> None
             assert (d['ships']['gone'], d['ships']['stillGone'], d['nothingChanged']) == (['gone'], [], False)
             (root / 'out' / 'release').rename(tmp_path / 'run1')
     assert (d['ships']['gone'], d['ships']['stillGone'], d['nothingChanged']) == ([], ['gone'], True)
+    changed = [line for line in out.read_text(encoding='utf-8').splitlines() if line.startswith('changed=')]
+    assert changed == ['changed=true', 'changed=false']
     m = json.loads((root / 'out' / 'release' / 'manifest.json').read_text(encoding='utf-8'))
     assert m['ships']['gone']['missingSince'] == '2026-11-17'

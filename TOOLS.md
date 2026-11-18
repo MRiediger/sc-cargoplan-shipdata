@@ -23,6 +23,24 @@ Sources for the action inputs (checked 18 Nov 2026): `actions/setup-python` `doc
 input is used for specifying the path to the version file"), `actions/setup-node` `docs/advanced-usage.md` (node-version-file
 "for example `.nvmrc`, `.node-version`, `.tool-versions`, `mise.toml`, or `package.json`").
 
+## GitHub Actions (T12.2)
+
+`ship-data.yml` uses first-party actions of GitHub (`actions/*`) only, at the major versions S12.0's spike workflow ran
+with (runs 44090875270, 44101340566; inputs checked against the READMEs on 18 Nov 2026). The source of each pin is the
+workflow file itself; `tests/test_workflow.py` fails when the workflow uses an action that is not in this table with
+the same version. A major tag moves within its major: see SD8, addendum Dependabot.
+
+| Action | Version | Used for |
+|---|---|---|
+| `actions/checkout@v7` | v7 | this repo; the app at `appTag` in the gate (`repository`, `ref`, `path`); `persist-credentials: false` where nothing is pushed |
+| `actions/setup-python@v7` | v7 | `python-version-file: .python-version` |
+| `actions/setup-node@v7` | v7 | `node-version-file: .nvmrc` |
+| `actions/setup-dotnet@v6` | v6 | `global-json-file: app/global.json` (gate) |
+| `actions/cache/restore@v6` | v6 | model cache by SHA, `restore-keys: models-` (never the catalog, SD7) |
+| `actions/cache/save@v6` | v6 | model cache after the chain, and pruned after publishing (condition B) |
+| `actions/upload-artifact@v7` | v7 | reports only (JSON, CSV of hashes, summaries); several paths keep `work/` and `out/` ("the least common ancestor of all the search paths will be used as the root directory") |
+| `actions/download-artifact@v8` | v8 | the reports for gate, pr and heartbeat (`pattern`, `merge-multiple`) |
+
 **pytest** is the only new dependency of T12.1. It is the test runner that `CLAUDE.md` already names: the tests are
 plain functions with fixtures (`tmp_path`, `monkeypatch`), and stdlib `unittest` would need classes for the same. It sits
 in a file of its own, because `requirements.txt` stays byte-equal to the holo-v3 build.
