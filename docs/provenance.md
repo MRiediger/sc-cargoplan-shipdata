@@ -37,10 +37,10 @@ From `MRiediger/sc-cargoplan` at `v0.5.1` (`da48270`; `main` has the same `tools
 | File | SHA-256 at v0.5.1 | SHA-256 here |
 |---|---|---|
 | `tools/ShipJson.ps1` | `ae5f8c3a67d8be276eca3ba618693dbec5b65a3cb2988467117a3ee45c9541a7` | unchanged |
-| `tools/import-motherlode.ps1` | `5f7b5122ea5041e1b81a8f1f92c357b37e24b01e40302423adfd32ad4df6f84f` | `bdf8615523fbfcdc6a68ec2797850f906b61b0157cc1200057bce61e89359d5a` |
+| `tools/import-motherlode.ps1` | `5f7b5122ea5041e1b81a8f1f92c357b37e24b01e40302423adfd32ad4df6f84f` | `71ebfde4c0a753c2a6598ebde3d3c06760aece017acf571e97502d0151432410` (T12.1b; T12.1: `bdf86155…`) |
 
-`import-motherlode.ps1` has four changes (plan T12.1, P6). Each one has a test in `tests/test_import.py`. Each test was
-red against the v0.5.1 script and against the change undone once:
+`import-motherlode.ps1` has five changes (plan T12.1, P6; T12.1b, P1). Each one has a test in `tests/test_import.py`.
+Each test was red against the script before the change and against the change undone once:
 
 1. **Date:** `Read-Catalog` reads with `ConvertFrom-Json -DateKind String` when the parameter exists (pwsh >= 7.5).
    Without it, pwsh 7 writes `updatedAt` into `source` in the culture's date format. Measured in S12.0: 104 of 108
@@ -58,6 +58,11 @@ red against the v0.5.1 script and against the change undone once:
    second import run after its outline exists. Until then the file has no anchors, and `verify` keeps it out of a release.
 4. **`-Report <json>`:** each ship's status, detail, className, modelKey, shift and anchorsKept as JSON, so `verify`
    reads the rules instead of parsing the log. Ships not in the catalog are listed as `absent`.
+5. **`-PreviousOrder <json>` instead of `-Previous <catalog>`** (T12.1b, SD2): the grid order is compared with the last
+   release's `orderKeys` (id -> keys, written by `diff` from the manifest), not with an older catalog, which stays out of
+   releases and caches (A17, SD7). The rule is unchanged: the same grids in another order are not written (status
+   `order`). The report carries each written ship's `orderKeys`. The hashtable is `$orderBefore`, since PowerShell names
+   are case-insensitive and `$previousOrder` would be the parameter.
 
 Besides those: the default outlines path uses `Join-Path` instead of a backslash, and the header names the changes.
 The 19 C# tests of the import (`sc-cargoplan/tests/CargoPlan.Core.Tests/ImportMotherlodeScriptTests.cs`) stay in the

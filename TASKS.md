@@ -307,7 +307,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins: Python 3.14.5, numpy 2.5.3, opencv-py
 8. **Gate-Skripte:** Sie liegen unverändert in `tools/gate/` (`say.sh`, `pictures.sh`, `swap.sh`, `csvdiff.py`). `spike.yml` ist gelöscht; der Gate-Job wird neu geschrieben.
 9. **`pytest`** läuft im Ketten-Job vor `fetch` (65 Tests, ≈ 20 s, braucht pwsh).
 
-### [ ] T12.1b Nachträge – Review-Entscheidungen als Code (eigene Session)
+### [x] T12.1b Nachträge – Review-Entscheidungen als Code (Plan freigegeben 18.11.2026 mit F1 = (a) und E1, `docs/plans/T12.1b-nachtraege.md`)
 
 **Warum:** D1, D2, D3 und E1 aus dem T12.1-Review (SD2, SD4, SD5, SD6) ändern Regeln und Release-Layout. T12.2 baut den Workflow auf dieses Layout, also kommt der Code vorher.
 - **Judge nach SD5** in `rules.py`: fünf PR-Fälle (true → false, > 110 % Budget, Hausdorff schlechter um mehr als `HAUSDORFF_TOLERANCE = 0.0025`, kein vergleichbarer Vorgänger, zusätzlich verfehlte Metrik), sonst Hinweis; ein Test je Fall
@@ -317,6 +317,78 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins: Python 3.14.5, numpy 2.5.3, opencv-py
 - **Toleranz messen:** die 22 Schiffe mit `passed=false` mit den Modellen vom 17.11. bauen (lokal, WSL), Δ Hausdorff je Schiff hier eintragen, SD5 per Addendum bestätigen oder korrigieren
 
 **Akzeptanz:** `release --dry-run` zeigt das Layout (heute 104 Assets); `diff` gegen den Dry-Run-Ordner liefert weiter **1 geändert / 1 neu / 6 verschwunden**; jede neue Regel einmal provoziert rot; Toleranz gemessen und in SD5; `pytest tests` grün.
+
+**Plan:** `docs/plans/T12.1b-nachtraege.md`, freigegeben 18.11.2026 mit **F1 = (a)** (`fails` je Holo ins Manifest) und Korrektur **E1** (Judge-Befund als Felder in `verify.json`, Text nur fürs Log). **Entscheidung Martin (18.11.):** Seed-`orderKeys` aus dem Archiv vom 16.11. (`release --seed --catalog`).
+
+**Präzisierung in der Planphase, ratifiziert durch Freigabe:**
+1. **P1** „`diff.py` vergleicht die Grid-Reihenfolge“ → `diff.py` liefert die Vorgänger-Keys aus dem Manifest, der **Import** vergleicht (`-PreviousOrder`): Bei geänderter Reihenfolge darf die Datei gar nicht erst geschrieben werden.
+2. **P2** Seed-Keys über den echten Import gegen das Archiv (eine `OrderKey`-Implementierung); `--catalog` ist beim Seed Pflicht; würde das Archiv eine Datei umschreiben, stoppt der Seed.
+3. **P3/F1** `holo.ships.<slug>.fails` als Pflichtfeld (SD2-Addendum).
+4. **P4** Hausdorff = Maximum der drei Ansichten. **P5** vergleichbar = gleiche `className` (Re-Export ja, Quellwechsel nein).
+5. **P6** Holos flach schon in der Stage, `ships.zip` deterministisch. **P7** `verify` braucht alle Holos des Vorgängers, `diff` nur Manifest + ZIP.
+6. **P8** „Wieder da“ explizit (`rules.back` + Hinweis): vorher galt die Regel nur, weil niemand die Felder setzte – ein Test wäre nie rot gewesen.
+
+**T12.1b Befund (18.11.2026)**
+
+Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session: **0 API-Rufe, 0 Seiten-GET, 22 Modell-GET** (nur Toleranz-Messung). Commits: `b2cac0a` (Plan), `28bdad8` (Judge), `6af3dff` (wieder da), `e1ba722` (OrderKeys), `c2d72a8` (Layout).
+
+1. **Tests: 69 → 86 grün** (Abschluss: `86 passed in 79.16s (0:01:19)`). Je Block erst rot (Judge 12, wieder da 2, OrderKeys 6, Layout 13 Tests rot), dann grün. **24 Provokationen**, jede mit Fehler rein → rot → raus → grün (Skript im Scratchpad, stellt die Datei immer wieder her):
+   - SD5 (9): Fall 1 entfernt · `BUDGET_SLACK` 1,2 · Fall 3 entfernt · Absolutwert statt Δ (3 rot) · Toleranz 0,002 · Fall 4 nur bei `passed=false` (2 rot) · „vergleichbar = Vorgänger existiert“ · Fall 5 entfernt · P9 zurück (2 rot). Jeder Fall-Test wurde allein rot, weil je Fixture genau ein Fall feuern kann.
+   - F1 (3): Seed leitet nichts ab · Seed prüft `passed` nicht · Manifest liest Einträge ohne `fails`.
+   - SD6 (2): `back` findet nichts · `verify` übernimmt den Vorgängerzustand aller Schiffe.
+   - OrderKeys (5): Vergleich im Import aus · Import feuert bei jedem Vorgänger · Seed nimmt keine Keys · Seed stoppt nicht · Manifest prüft den Typ nicht.
+   - Layout (5): ein Asset zu viel · ZIP mit Dateizeit · `diff` liest `previous/ships` (3 rot) · `unpack` ohne Manifest-Prüfung · `unpack` ohne Pfadprüfung.
+   - **Ein Test war zu schwach:** „ZIP mit Dateizeit“ blieb grün – `touch()` ändert die Zeit um Sekundenbruchteile, ZIP speichert 2-Sekunden-Schritte. Nachgeschärft (`os.utime` auf 2001), danach rot.
+2. **F1 – `fails` ableitbar:** `holo_mesh.judge` auf die holo-v3-Metriken (Sliver-Grenze 0,1563 aus `chain.py`, `error` ohne Länge = nicht verfehlt) ergibt **97 / 97** dieselben `fails` wie die `PP.json` des byte-gleichen T12.1-Laufs; bei allen 101 Einträgen passt `passed` zur Ableitung.
+3. **PowerShell-Falle:** Der neue Parameter `$PreviousOrder` und die alte Hashtable `$previousOrder` waren **dieselbe Variable** (Namen ohne Groß/Klein) → 13 rote Tests mit „Cannot find path 'System.Collections.Hashtable'“. Hashtable heißt jetzt `$orderBefore`.
+4. **Akzeptanz Seed** (`release --seed … --catalog cache/catalogs/2026-11-16/raw`): 108 Schiffsdateien, 101 Holos, **104 Assets**; `orderKeys` für **104** Schiffe, `null` für genau **4** (135c, 600i Executive, Cyclone, F7C); Import gegen das Archiv: 104 `same`, 1 `kept`, 3 nicht im Archiv, **0 Umschreibungen**.
+5. **Akzeptanz Lauf 16.11. gegen den Seed** (`fetch` → `diff` → `build` → `verify` → `release --dry-run`): 0 Modell-GET (99 im Cache); Reihenfolge für **104** Schiffe verglichen, **0** vertauscht; 0 Modelle gebaut; `verify` **0 Stopps**, 4 Hinweise (135c aus `overrides.json`, `missingSince` für 600i Executive, Cyclone, F7C); Dateien gleich dem Seed **109 / 110** – die eine ist `outlines.json`, nur Stempel `dataVersion` (holo-v3 → ships-2026.11, Auflage C).
+   **Dry-Run-Assets:** `manifest.json`, `NOTICE.md`, `ships.zip`, **101 × `.holo`** = **104 Assets, 33 112 743 B** (T12.1: 213 Dateien, 33 259 967 B).
+6. **Akzeptanz `diff` 17.11. gegen den Dry-Run**, Ordner nur mit `manifest.json` + `ships.zip` (keine Holos): **1 geändert** (`f7c_hornet_mk_ii`), **1 neu** (`hyun`), **6 neu verschwunden** (Carrack ×2, MOLE ×2, Mustang Alpha Vindicator, Valkyrie Liberator; alle mit Basis); 2 fehlten schon (600i Executive, Cyclone), `diff` listet sie unter „gone“ mit (8 gesamt, wie in T12.1). Reihenfolge für **98** Schiffe verglichen, **0** vertauscht, nicht verglichen: F7C (Seed ohne Keys). Modelle: 96 neu exportiert, 2 neu, 1 ohne URL, 2 ungenutzt – wie T12.1.
+7. **Toleranz-Messung (SD5):** 22 Schiffe mit `passed=false` (holo-v3), gebaut aus den Modellen vom 17.11., beurteilt mit dem neuen Judge gegen ihren holo-v3-Eintrag. **22 Modell-GET**, alle 200, **22 669 504 B in 16,5 s** (0,2 s Abstand, kein Retry, 0 nicht verfügbar). Bau **1 985 s** (parallel zu Tests, max 137 s Perseus/Polaris-Klasse). Skript nur gemessen, nicht committet (Spike-Regel); Ergebnisse unter `cache/runs/tolerance-17.11/`.
+
+| Slug | Modell alt → neu | H alt | H neu | Δ | Budget | Dreiecke alt → neu | passed | fails neu | SD5 |
+|---|---|---|---|---|---|---|---|---|---|
+| aegs-hammerhead | `5a90679688b0` → `91954cc6bc44` | 0,0062 | 0,0062 | ±0,0000 | 40k → 40k | 39353 → 39444 | False | hausdorff | Hinweis |
+| aegs-idris-m | `65e6cd1109ea` → `122e5124061f` | 0,0124 | 0,0124 | ±0,0000 | 40k → 40k | 39888 → 39355 | False | hausdorff | Hinweis |
+| aegs-idris-p | `0874173d26fd` → `f8705f922b12` | 0,0124 | 0,0124 | ±0,0000 | 40k → 40k | 39840 → 39840 | False | hausdorff | Hinweis |
+| aegs-tiburon | `b0574f9dca34` → `b731cc759048` | 0,0062 | 0,0062 | ±0,0000 | 40k → 40k | 39361 → 39371 | False | hausdorff | Hinweis |
+| anvl-liberator | `df77df4465c9` → `9196013aacd8` | 0,0087 | 0,0087 | ±0,0000 | 40k → 40k | 38843 → 38844 | False | hausdorff | Hinweis |
+| argo-raft | `373c0254d538` → `9865519953b3` | 0,0062 | 0,0062 | ±0,0000 | 40k → 40k | 39972 → 39987 | False | hausdorff | Hinweis |
+| argo-srv | `2ab95478ddbe` → `922183b24a7f` | 0,0227 | 0,0227 | ±0,0000 | 40k → 40k | 39930 → 39942 | False | hausdorff | Hinweis |
+| drak-corsair | `8b4df664aa11` → `14156e847240` | 0,0931 | 0,0339 | -0,0592 | 40k → 40k | 39923 → 39535 | False | hausdorff | Hinweis |
+| drak-ironclad | `77bdd849b56b` → `ec799f603403` | 0,0062 | 0,0062 | ±0,0000 | 40k → 40k | 39758 → 39158 | False | hausdorff | Hinweis |
+| drak-ironclad-assault | `598e3ef88b95` → `f75f38fdf222` | 0,0095 | 0,0095 | ±0,0000 | 40k → 40k | 38716 → 39004 | False | hausdorff | Hinweis |
+| misc-starfarer | `76bf9600c71c` → `2c37ad19075f` | 0,0132 | 0,0029 | -0,0103 | 40k → 40k | 39330 → 39379 | True |  | – |
+| misc-starfarer-gemini | `18e9ee0cffb1` → `a4dfa841f945` | 0,0112 | 0,0112 | ±0,0000 | 40k → 40k | 39277 → 39317 | False | hausdorff | Hinweis |
+| misc-starlancer-max | `b4b6a79cd2ec` → `2e590003d496` | 0,0058 | 0,0058 | ±0,0000 | 40k → 40k | 38491 → 38491 | False | hausdorff | Hinweis |
+| misc-starlancer-tac | `3b3d9182b2ec` → `ce679bd3ad0f` | 0,0062 | 0,0062 | ±0,0000 | 40k → 40k | 39098 → 39098 | False | hausdorff | Hinweis |
+| rsi-apollo-medivac | `4f82c1751faf` → `045e38bcb039` | 0,0219 | 0,0219 | ±0,0000 | 40k → 40k | 39707 → 39707 | False | hausdorff | Hinweis |
+| rsi-apollo-triage | `5def315d117d` → `c3df0e3dff02` | 0,0219 | 0,0219 | ±0,0000 | 40k → 40k | 39694 → 39694 | False | hausdorff | Hinweis |
+| rsi-constellation-mk-iv-aquila | `9ec8e8365962` → `eab21dedf6e3` | 0,0103 | 0,0103 | ±0,0000 | 40k → 40k | 39676 → 39680 | False | hausdorff | Hinweis |
+| rsi-constellation-mk-iv-phoenix | `00d242da8b3c` → `fd754a8fb055` | 0,0132 | 0,0132 | ±0,0000 | 40k → 40k | 39468 → 39532 | False | hausdorff | Hinweis |
+| rsi-constellation-mk-v-centaurus | `150cf97828c6` → `a3b6c93a833c` | 0,0074 | 0,0074 | ±0,0000 | 40k → 40k | 39374 → 39380 | False | hausdorff | Hinweis |
+| rsi-hermes | `7fcd5b56ed47` → `67bf1e6ee65c` | 0,0219 | 0,0219 | ±0,0000 | 40k → 40k | 39554 → 39554 | False | hausdorff | Hinweis |
+| rsi-perseus | `da0d2cb45b00` → `0133bd612a97` | 0,0440 | 0,0440 | ±0,0000 | 40k → 40k | 38706 → 38716 | False | hausdorff | Hinweis |
+| rsi-polaris | `418c3593ed5d` → `5e604daaed36` | 0,0112 | 0,0112 | ±0,0000 | 40k → 40k | 39414 → 39419 | False | hausdorff | Hinweis |
+
+   - **Δ Hausdorff: 20 × exakt 0, 2 × besser** (Corsair −0,0592; Starfarer −0,0103 – sie **besteht jetzt**). min −0,0592, Median 0, **max 0**; **0** über 0,0025, **0 Stopps**, 21 Hinweise (alle „fails hausdorff, comparable“), 1 ohne Befund (Starfarer).
+   - Budget bei allen 22 gleich (40k), Dreiecke ±600. Fall 5 feuert nicht: niemand verfehlt neu eine zweite Metrik.
+   - **Warum exakt 0:** Der Judge misst die Silhouette in 512-px-Rastern; ein Re-Export verschiebt Kanten unterhalb eines Pixels, Hausdorff springt nur in Pixelschritten (≈ 0,002). Das Rauschen eines Re-Exports ist **0 Pixel**, nicht „knapp unter einem“.
+   - **Urteil (vorab festgelegt: feuert bei keinem → bestätigt):** **0,0025 bestätigt**, SD5-Addendum. Erst eine Verschlechterung um ≥ 2 Judge-Pixel (≈ 0,004) stoppt; eine um 1 Pixel (≈ 0,002) bleibt Hinweis.
+   - Grenze: die 79 bestehenden Holos nicht gebaut (Fall 1 zeigt erst der erste echte Lauf).
+
+**Das ändert sich an T12.2:**
+1. **Upload-Reihenfolge:** Release als Entwurf anlegen, Holos + `ships.zip` + `NOTICE.md` hochladen, **`manifest.json` zuletzt**, dann veröffentlichen – `latest/download/manifest.json` zeigt nie auf ein halbes Release (`gh release create --draft` / `upload` / `edit --draft=false`, in T12.2 gegen die Doku prüfen).
+2. **Vorgänger laden:** `diff` braucht nur `manifest.json` + `ships.zip`, aber **`verify` braucht alle Holo-Assets** des Vorgängers (die unveränderten gehen byte-gleich ins neue Release; fehlt eins, bricht `verify` mit klarer Meldung ab). Also `gh release download` aller Assets (≈ 33 MB).
+3. **„Nothing changed“ ist heute unerreichbar:** `diff` zählt Schiffe, die schon im Vorgänger `missingSince` hatten (600i Executive, Cyclone), jeden Lauf wieder als „gone“ → `nothingChanged` bleibt `false`, der Lebenszeichen-Pfad (SD9) käme nie. Fix zu Beginn von T12.2: nur **neu** Verschwundene zählen (im Vorgänger ohne `missingSince`/`follows`), mit Test.
+4. Kein `--previous-catalog` mehr; `release --seed` braucht `--catalog`.
+5. **PR-Text aus `verify.json`:** `findings[].data` trägt `cases`, Modell, `passed`, `fails`, Hausdorff (alt, neu, Δ, Toleranz), Dreiecke, Budget (E1); `detail` ist nur Log.
+6. **Erster echter Lauf:** Stopps durch F7C (Fall 4, Quellwechsel Fleetyards → Motherlode) und `hyun` (Fall 4, neu); die 22 `passed=false` stoppen **nicht** (Befund 7: 21 Hinweise, Starfarer besteht jetzt). Ob ein Re-Export eines der 79 bestehenden Holos kippen lässt (Fall 1), zeigt erst dieser Lauf.
+7. **T12.6:** Der Seed braucht das lokale Archiv vom 16.11. (A17, SD7) – das erste Release wird lokal in WSL gebaut (`cache/runs/seed` ist schon die Upload-Menge); der Upload-Weg muss das berücksichtigen.
+8. **`ships.zip` reproduzierbar:** gleicher Inhalt → gleiche Bytes bei gleichen Pins (zlib); über Plattformen hinweg nicht zugesagt, der Vertrag sind die Hashes in `files`.
+
+- [x] Akzeptanz erfüllt (18.11.2026); Abnahme Master-Chat steht aus.
 
 ### [ ] T12.2 Workflow `ship-data.yml`
 

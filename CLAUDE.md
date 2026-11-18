@@ -56,7 +56,7 @@ App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.s
 
 | Fall | Regel |
 |---|---|
-| Judge (SD5, ersetzt P9) | Verschlechterung heißt Metrik, nicht Flag. PR mit Metriken und Bild, wenn `passed` true → false kippt; > 110 % Budget; Hausdorff um mehr als `HAUSDORFF_TOLERANCE` (0,0025, vorläufig bis T12.1b) schlechter als der Vorgänger; kein vergleichbarer Vorgänger (neues Schiff, Quellwechsel); bei `passed=false` eine zusätzliche Metrik verfehlt. Sonst Hinweis, auch bei `passed=false` (holo-v3: 22 Schiffe, alle nur Hausdorff) |
+| Judge (SD5, ersetzt P9) | Verschlechterung heißt Metrik, nicht Flag. PR mit Metriken und Bild, wenn `passed` true → false kippt; > 110 % Budget; Hausdorff um mehr als `HAUSDORFF_TOLERANCE` (0,0025, bestätigt in T12.1b: Re-Export-Rauschen 0 Pixel) schlechter als der Vorgänger; kein vergleichbarer Vorgänger (neues Schiff, Quellwechsel); bei `passed=false` eine zusätzliche Metrik verfehlt. Sonst Hinweis, auch bei `passed=false` (holo-v3: 22 Schiffe, alle nur Hausdorff) |
 | Schiff aus dem Katalog verschwunden (SD6) | behalten, letzte Daten + Holo bleiben, `missingSince` im Manifest; nach 3 Läufen Backlog-Zeile. Mehr als **3** neu Verschwundene ohne Basis → PR |
 | Variante verschwunden (SD6) | Basis-`className` im Katalog und Racks im letzten Manifest hash-gleich zur Basis → `follows` die Basis; sonst wie verschwunden |
 | Schiff wieder da (SD6) | `missingSince` und `follows` → `null`, normal durch Diff, Build, Judge |
@@ -126,11 +126,11 @@ Cache (`cache/`), Modelle (`*.glb`), Arbeitsordner, Bilder, PDFs und Kataloge si
 
 ```powershell
 python -I tools/run.py fetch [--saved <dir>] [--catalog-only]   # Katalog per API (einmal) oder aus gespeicherten Antworten; Modelle nach Hash
-python -I tools/run.py diff --previous <release-dir>            # gegen letztes Release (ab T12.1b: Manifest + ships.zip): neu / geändert / verschwunden, Modelle separat
+python -I tools/run.py diff --previous <release-dir>            # gegen letztes Release (Manifest + ships.zip, ohne Holos): neu / geändert / verschwunden, Reihenfolge gegen orderKeys, Modelle separat
 python -I tools/run.py build [--ship <id>] [--all]              # Flatten → Cull → Leiter → Export → Umriss → Anker
 python -I tools/run.py verify                                   # Regeln + Manifest + Hashes; Exit 2 = PR-Pfad
-python -I tools/run.py release --dry-run                        # Release-Inhalt zeigen, nichts hochladen
-python -I tools/run.py release --seed --app <dir> --holo <dir>  # erstes Release aus App + Holo-Release (T12.6)
+python -I tools/run.py release --dry-run                        # Assets packen und zeigen (manifest.json, NOTICE.md, ships.zip, <slug>.holo), nichts hochladen
+python -I tools/run.py release --seed --app <dir> --holo <dir> --catalog <raw-dir>  # erstes Release aus App + Holo-Release, orderKeys aus dem Katalog der App-Daten (T12.6)
 pytest                                                          # alle Tests (lokal: tools/local-wsl.sh test)
 gh workflow run ship-data.yml -f dry-run=true    # Dispatch ohne Release (nur zum Lesen des Logs, Martin klickt)
 gh run view --log                                # Log des letzten Laufs

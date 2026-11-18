@@ -1,8 +1,9 @@
 # Ship data – source and license note
 
-Data for SC-CargoPlan, published as a data release `ships-YYYY.MM[.N]` of this repository: the ships' cargo racks
-(`ships/`), their outlines (`outlines.json`), their holograms (`holo/`) and `manifest.json`. The app downloads them on
-its own; the holograms one file per ship, when the player picks that ship and the setting "Download ship holograms" is on.
+Data for SC-CargoPlan, published as a data release `ships-YYYY.MM[.N]` of this repository: `ships.zip` with the ships'
+cargo racks (`ships/`) and their outlines (`outlines.json`), one hologram per ship (`<slug>.holo`) and `manifest.json`.
+The app downloads them on its own; the holograms one file per ship, when the player picks that ship and the setting
+"Download ship holograms" is on.
 
 **Source:** cargo grid data and ship models from cryon.rocks (Motherlode), extracted from the Star Citizen game files;
 CIG assets, non-commercial fan project. The operators of Motherlode agreed to this use (Discord).

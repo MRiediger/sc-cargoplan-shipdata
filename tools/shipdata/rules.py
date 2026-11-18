@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 MISSING_STOP = 3            # more newly gone ships without base than this stop the run (TASKS.md, Martin 17.11.)
 BUDGET_SLACK = 1.1          # above 110 % of its budget step a hologram fails (judge in holo_mesh.py, run-all.ps1)
-HAUSDORFF_TOLERANCE = 0.0025    # SD5 case 3: about one judge pixel at 512 px (1 px ~ 0.002 of the length); measured T12.1b
+HAUSDORFF_TOLERANCE = 0.0025    # SD5 case 3: one judge pixel at 512 px (~0.002) passes, two stop; T12.1b: re-export noise 0 px
 HAUSDORFF_KEYS = ('topHausdorff', 'sideHausdorff', 'frontHausdorff')
 
 
