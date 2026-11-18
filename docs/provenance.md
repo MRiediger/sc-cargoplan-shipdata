@@ -98,6 +98,23 @@ Real catalogs are never committed (A17). They live only in the gitignored `cache
 - 16 Nov from `sc-ship-outlines/motherlode`;
 - 17 Nov from the Actions cache of S12.0, rescued encrypted (plan T12.1, step 0).
 
+## Motherlode cargo-grid transform (the source's own description)
+
+Source: https://cryon.rocks/developers, OpenAPI 3.1 inline, read 2026-11-18 in the master chat. Text as Martin passed
+it on (T12.2); the session itself did not call cryon.rocks.
+
+- Endpoint `GET /api/public/v1/cargo-grids`, schema `CargoGridCatalog` → `CargoGridShip` (id, className, name, manufacturer, cargoScu, containerSizes, grids). The description states "Data only: no 3D models" and asks to fetch per game release, not per request; 429 carries `Retry-After`.
+- `transform`: 12 numbers, a 3×4 matrix row by row; the three left columns are the grid's own axes (x width, y length, z up from floor) expressed in ship axes (x right, y forward, z up); the fourth column is the centre of the grid's floor in metres from the ship model's origin. All grids of a ship have a transform or none does. Cells are 1.25 m; a size [w, l, h] spans x ±w·0.625, y ±l·0.625, z 0…h·1.25 in grid axes.
+- Motherlode's ship models share origin and scale but are Y-up: ship-space (x, y, z) → model (x, z, −y).
+- Floor centres were derived from how grids fit the models; Motherlode asks for reports of grids that look wrong in-game.
+- `GET /api/public/v1/ships` is salvage reference data (id, name, manufacturer, career, shipRole), not a model endpoint.
+
+What follows for the pipeline:
+- The model URLs stay with the page scraper (`fetch.py`): the API has no model endpoint ("Data only: no 3D models").
+- "Per game release, not per request" fits one call per run, monthly (CLAUDE.md); the run never retries a 429.
+- A grid without transform comes with all grids of its ship (none has one): the ship stays as it is (`overrides.json`, 135c).
+- Grid findings in a PR carry the request to report them to Motherlode (`workflow.pr_body`).
+
 ## Secrets scan
 
 Before the copy and once more on every file brought in (17 Nov 2026), these patterns were searched:

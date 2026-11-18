@@ -470,6 +470,12 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
      - (1) Ein `\1` hat den Weg PowerShell → WSL nicht überlebt und den Job gelöscht statt `runs-on` zu ändern – keine echte Provokation; neu über ein Python-Skript mit Argumentliste.
      - (2) `verify || [ $? -eq 2 ]` begann mit einem erlaubten Präfix, und ein `- run:` am Schrittanfang wurde nicht gelesen – Testlücke. Jetzt sind Shell-Operatoren verboten und `- run:` wird gelesen.
    - Suite: `164 passed in 107.98s`.
+   - Nach dem Push: `gh workflow list` → „ship data“ **active**, 0 Läufe (ein Syntaxfehler hätte einen roten Lauf erzeugt). Cron ab jetzt aktiv (D3), nächster Termin 1.12., 04:23 UTC.
+7. **Block 9 – Doku.**
+   - `docs/decisions.md`: **SD10** (Entwurfs-Release als Ablage), **SD11** (Ergebnis eines Laufs: nichts / Release / PR / rot), **SD8-Addendum Dependabot** (E3; Vorschlag: keine automatischen Version-Updates, Sicherheitswarnungen an – zur Bestätigung).
+   - `docs/provenance.md`: Motherlode-OpenAPI wörtlich (Quelle `cryon.rocks/developers`, gelesen 18.11. im Master-Chat), was daraus folgt; Ports `gate.py`, `sheet.py`; `tools/gate/` als entfernt.
+   - `CLAUDE.md`: Diagramm (Entwurf, `publish-merged`, Gate rot, heartbeat), Domänenfakt „kein Modell-Endpunkt“, Releases-Zeile, Projektstruktur, Befehle.
+   - `README.md`: Abschnitt „The monthly run“. `TOOLS.md`: Actions-Pins (Block 8).
 
 ### [ ] T12.3 App: Datenkanal (im App-Repo)
 

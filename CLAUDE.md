@@ -44,9 +44,12 @@ ship-data.yml – cron `23 4 1 * *` + workflow_dispatch (dry-run)
   5  Regressions-Gate (windows-latest): Checkout sc-cargoplan auf gepinntem Tag,
      alter und neuer Datenstand im selben Job gerendert (ShipPictureTests),
      nur geänderte Schiffe dürfen abweichen
-  6  grün → Data-Release ships-YYYY.MM, Assets flach (SD4): manifest.json, NOTICE.md,
-     ships.zip (ships/** + outlines.json), <slug>.holo je Schiff
-     Regel feuert → PR mit Befund + Kontaktabzug; Martins Merge = Freigabe → Release
+  6  Entwurfs-Release ships-YYYY.MM[.N] (SD10), Assets flach (SD4): manifest.json (zuletzt), NOTICE.md,
+     ships.zip (ships/** + outlines.json), <slug>.holo je Schiff; Kontaktabzug am Entwurf
+     grün → Entwurf veröffentlichen, Hygiene, Modell-Cache prunen
+     Regel feuert → PR auf data/YYYY.MM (state/pending.json + Befund); Martins Merge = Freigabe →
+     publish-merged veröffentlicht genau diesen Entwurf; Gate rot → roter Lauf (SD11)
+  7  heartbeat: state/last-run.json mit einer Zeile für Martin, in jedem Lauf außer Dry-Run
 App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.ships im Manifest),
      Holos lazy pro Schiff aus …/releases/download/<dataVersion>/<slug>.holo.
      release.yml der App zieht beim Build die Baseline ins ZIP.
@@ -70,7 +73,7 @@ App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.s
 
 ## Domänenfakten
 
-- **Quelle:** Motherlode (Sciirof, cryon.rocks). Katalog per API mit Key; Modell-URLs stehen nicht in der API, sondern auf der Seite `cryon.rocks/ops/cargo` (RSC-Stream, ohne Key); Modelle liegen in einem öffentlichen Supabase-Bucket. Bis Sciirof einen Modell-Endpunkt liefert, bleibt der Seiten-Scraper – mit klarem Fehler und PR, sobald die Seite sich ändert. **Die API einmal pro Lauf rufen, nie in Schleife.** Sciirofs Freigabe für den Monatslauf steht aus.
+- **Quelle:** Motherlode (Sciirof, cryon.rocks). Katalog per API mit Key; Modell-URLs stehen nicht in der API, sondern auf der Seite `cryon.rocks/ops/cargo` (RSC-Stream, ohne Key); Modelle liegen in einem öffentlichen Supabase-Bucket. Die OpenAPI-Spezifikation bestätigt: kein Modell-Endpunkt („Data only: no 3D models“, Zitat und Transform-Konvention in `docs/provenance.md`). Bis Sciirof einen liefert, bleibt der Seiten-Scraper – mit klarem Fehler und PR, sobald die Seite sich ändert. **Die API einmal pro Lauf rufen, nie in Schleife.** Sciirofs Freigabe für den Monatslauf steht aus.
 - **Schiffs-JSON:** Format in `sc-cargoplan/docs/ship-format.md`, `schemaVersion` aktuell 6 (`ShipLoader.SupportedSchemaVersion`; 4 und 5 liest die App noch) (Racks mit `origin`, `grid`, `stackAxis`, optional `rotation`; `modelKey`, `holoOrigin`, `outlineOrigin`). Koordinaten x Bug+, y Backbord+, z oben+, 1 Zelle = 1 SCU = 1,25 m. **Schema-Bump nur zusammen mit einem App-Release.**
 - **Umriss:** `outlines.json`, Meter, Ursprung unabhängig vom Rack-Nullpunkt, Zuordnung per `modelKey` (App-D90, D94).
 - **Holo:** Format SCH2 (`sc-cargoplan/docs/holo-format.md`), aus dem Motherlode-Modell: Flatten → Cull → Leiter 20k/30k/40k (meshoptimizer) → Export. CIG-Material: nie im Repo, nur Cache und Release-Asset, mit NOTICE; `holo: null` im Manifest ist der Kill-Switch.
@@ -88,11 +91,11 @@ App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.s
 | Gate | **beide Stände im selben Job rendern**, Hash-exakt (`ShipPictureTests`), Schwelle nur für den Judge (SD3) | Runner- und Plattform-Drift fallen per Konstruktion weg (S12.0 K1). |
 | Zustand | Manifest im Release + `state/last-run.json` im Repo (SD9) | Kein Zustand in Dateien, die nur lokal existieren. |
 | Cache | nur Modelle nach SHA, **nie der Katalog** (SD7) | Fork-PR-Workflows können den Cache lesen. |
-| Releases | **Pre-Release-Flag aus**, `releases/latest` ist immer das letzte Data-Release; letzte zwei bleiben; Assets flach: `manifest.json`, `NOTICE.md`, `ships.zip`, `<slug>.holo` (SD4) | Die App braucht genau eine URL ohne API; GitHub-Assets können keine Ordner sein. |
+| Releases | **Pre-Release-Flag aus**, `releases/latest` ist immer das letzte Data-Release; letzte zwei bleiben; Assets flach: `manifest.json`, `NOTICE.md`, `ships.zip`, `<slug>.holo` (SD4); bis zur Veröffentlichung ein **Entwurf** als Ablage, Artefakte nur mit Berichten (SD10) | Die App braucht genau eine URL ohne API; GitHub-Assets können keine Ordner sein; CIG-Material nie in öffentlichen Artefakten. |
 | PR-Pfad | `GITHUB_TOKEN`; CI auf dem PR startet erst nach Martins „Approve workflows to run“ | Kein PAT, solange zwei Klicks reichen. |
 | Lizenz | Code MIT, Daten NOTICE | Maximale Verbreitung des Codes, Rückziehbarkeit der Daten. |
 
-## Projektstruktur (Ist nach T12.0; `ship-data.yml` und `state/` kommen mit T12.2)
+## Projektstruktur (Ist nach T12.2)
 
 ```
 sc-cargoplan-shipdata/
@@ -101,17 +104,18 @@ sc-cargoplan-shipdata/
 ├── .github/workflows/
 │   └── ship-data.yml              # Monatslauf + Dispatch (T12.2)
 ├── tools/
-│   ├── run.py                     # Einstieg: fetch · diff · build · verify · release
+│   ├── run.py                     # Einstieg: fetch · previous · diff · build · verify · release · draft · gate · publish · pr · heartbeat · pins
 │   ├── pins.json                  # appTag, runner, pwsh (SD8)
-│   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, release, chain, stages, importer, compare, log
+│   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, release, chain, stages, importer, compare, log,
+│   │                              #   workflow (previous, draft, publish, pr, heartbeat), gate + sheet (Render-Gate), github (gh/git)
 │   ├── holo_mesh.py · simplify.mjs                # Holo-Kette, byte-gleich zu holo-v3 (docs/provenance.md)
 │   ├── import-motherlode.ps1 · ShipJson.ps1   # Racks + Anker (aus dem App-Repo gezogen, T12.1)
-│   ├── gate/                      # Render-Gate-Skripte aus S12.0 (say, pictures, swap, csvdiff), für T12.2
 │   ├── local-wsl.sh               # WSL Ubuntu 24.04 mit den Pins: setup · test · run
 │   ├── requirements.txt · requirements-dev.txt · package.json · package-lock.json
 ├── overrides.json                 # Schiffe, die auf einem alten Stand bleiben (Grid ohne Transform)
 ├── pytest.ini
-├── state/last-run.json            # Lebenszeichen + Zusammenfassung des letzten Laufs
+├── state/last-run.json            # Lebenszeichen + Zusammenfassung des letzten Laufs (SD9, schreibt heartbeat)
+├── state/pending.json             # nur auf dem PR-Branch: Entwurf + Manifest-SHA, den der Merge veröffentlicht
 ├── tests/                         # pytest: Regeln, Diff, Manifest, Vergleich; Fixtures klein und synthetisch
 └── docs/
     ├── decisions.md               # SD1…, nummeriert; App-Entscheidungen bleiben in sc-cargoplan/docs/decisions.md
@@ -130,7 +134,12 @@ python -I tools/run.py diff --previous <release-dir>            # gegen letztes 
 python -I tools/run.py build [--ship <id>] [--all]              # Flatten → Cull → Leiter → Export → Umriss → Anker
 python -I tools/run.py verify                                   # Regeln + Manifest + Hashes; Exit 2 = PR-Pfad
 python -I tools/run.py release --dry-run                        # Assets packen und zeigen (manifest.json, NOTICE.md, ships.zip, <slug>.holo), nichts hochladen
-python -I tools/run.py release --seed --app <dir> --holo <dir> --catalog <raw-dir>  # erstes Release aus App + Holo-Release, orderKeys aus dem Katalog der App-Daten (T12.6)
+python -I tools/run.py release --seed --app <dir> --holo <dir> --catalog <raw-dir>  # erstes Release aus App + Holo-Release, orderKeys aus dem Katalog der App-Daten
+python -I tools/run.py previous                                 # letztes Release (nach Version, E1) laden und prüfen; Name dieses Laufs
+python -I tools/run.py draft [--folder <dir>]                   # Entwurfs-Release anlegen, manifest.json zuletzt, Assets prüfen
+python -I tools/run.py gate --app <checkout> --old <dir> --new <dir>  # Render-Gate lokal (Windows); im Workflow --old-tag/--new-tag
+python -I tools/run.py publish (--tag T | --pending state/pending.json)  # Entwurf prüfen, veröffentlichen, Hygiene, Prune
+python -I tools/run.py pr --tag T --dry-run                     # PR-Text nach out/pr-body.md (ohne --dry-run: Branch + PR)
 pytest                                                          # alle Tests (lokal: tools/local-wsl.sh test)
 gh workflow run ship-data.yml -f dry-run=true    # Dispatch ohne Release (nur zum Lesen des Logs, Martin klickt)
 gh run view --log                                # Log des letzten Laufs
