@@ -1,0 +1,13 @@
+{
+ "tag": "ships-2026.11.1",
+ "manifestSha256": "94129864f3ca5ced31fa38a8f3803e1b5b74dd5cc490074eac4f1a2d39cf06d8",
+ "runId": "44317285689",
+ "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44317285689",
+ "counts": {
+  "changed": 1,
+  "new": 1,
+  "gone": 8,
+  "holosRefreshed": 91,
+  "findings": 2
+ }
+}
