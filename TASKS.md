@@ -9,7 +9,7 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 
 ---
 
-## Phase 12 – Ship data channel (gestartet 16.11.2026, abgeschlossen <Datum der Abnahme T12.6b>)
+## Phase 12 – Ship data channel (gestartet 16.11.2026, abgeschlossen 19.11.2026)
 
 **Zielbild, Regeln, Manifest:** siehe CLAUDE.md. **Zwei Repos:** dieses baut und veröffentlicht, `sc-cargoplan` liest (App) und zieht die Baseline beim Build (`release.yml`).
 
@@ -572,7 +572,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Akzeptanz:** Netz-Gate, SC im Vordergrund: v0.5.1 → v0.6.0 per Velopack – bestanden (App-T12.6a, 19.11.). Das Data-Update im Overlay entfiel für v0.6.0 (Latest = Baseline, keine Ship-data-Zeile); den Kanal hat das T12.3-Gate belegt. Ab hier Branch + `--no-ff` für jede Änderung an diesem Repo.
 
-### [ ] T12.6b Shipdata-Abschluss (Plan freigegeben 19.11.2026 mit R1–R5, K1, E1, E2, `docs/plans/T12.6b-abschluss.md`, Branch `docs/p12-close`)
+### [x] T12.6b Shipdata-Abschluss (erledigt 19.11.2026; Plan freigegeben 19.11.2026 mit R1–R5, K1, E1, E2, `docs/plans/T12.6b-abschluss.md`, Branch `docs/p12-close`)
 
 **Warum:** Phase 12 ist technisch fertig; offen sind ein README für den 1.12. und den ersten PR, die erledigten Tasks, die Lehren der Phase, ein Backlog mit Anlässen und die Klicks, die nur Martin machen kann. Kein Code, kein Lauf, kein API-Ruf.
 - README; T12.3–T12.6 abhaken; Lehren; Backlog konsolidiert (inkl. Sciirofs Antwort vom 18.11.); SD13; SD3-Addendum; `cache/`-Hygiene; Martin-Klicks
@@ -604,9 +604,9 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 4. **App-Doku-Session** (R2): CONTRIBUTING „Correct ship data“, `docs/ship-format.md` (PR-Abschnitt, Überschrift „The three Fleetyards ships“) und `ship-correction.yml` auf „Issue statt Schiffsdatei-PR, wir melden an Motherlode“ ziehen; dazu dort T12.6b abhaken und Phase 12 schließen.
 
 **Akzeptanz:**
-- [ ] README beantwortet in zwei Minuten „was passiert am 1.12.“ und „was mache ich, wenn ein PR kommt“ – Martin liest einmal gegen
-- [ ] TASKS.md: Phase 12 geschlossen, Backlog mit Anlässen, keine offenen `[ ]` außer Backlog
-- [ ] Merge `--no-ff` nach Freigabe, Push durch CC (Shipdata-Regel)
+- [x] README beantwortet in zwei Minuten „was passiert am 1.12.“ und „was mache ich, wenn ein PR kommt“ – Martin liest einmal gegen
+- [x] TASKS.md: Phase 12 geschlossen, Backlog mit Anlässen, keine offenen `[ ]` außer Backlog
+- [x] Merge `--no-ff` nach Freigabe, Push durch CC (Shipdata-Regel)
 
 ---
 

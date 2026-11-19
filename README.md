@@ -7,7 +7,7 @@ release on start and offers it; nobody installs anything by hand.
 
 ## What happens on the 1st
 
-The workflow `ship-data.yml` runs on the 1st of every month at 04:23 UTC (next: **1 Dec**). It calls the Motherlode API
+The workflow `ship-data.yml` runs on the 1st of every month at 04:23 UTC. It calls the Motherlode API
 once, compares the catalog with the last release and ends in one of three ways:
 
 | Result | What you see | What you do |
