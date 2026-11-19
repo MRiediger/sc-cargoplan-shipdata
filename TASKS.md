@@ -9,7 +9,7 @@ Einstieg der App-Seite: `sc-cargoplan/TASKS.md`, Abschnitt „Phase 12“. Tasks
 
 ---
 
-## Phase 12 – Ship data channel (gestartet 16.11.2026)
+## Phase 12 – Ship data channel (gestartet 16.11.2026, abgeschlossen <Datum der Abnahme T12.6b>)
 
 **Zielbild, Regeln, Manifest:** siehe CLAUDE.md. **Zwei Repos:** dieses baut und veröffentlicht, `sc-cargoplan` liest (App) und zieht die Baseline beim Build (`release.yml`).
 
@@ -534,7 +534,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 3. **T12.5 (Baseline aus dem Release):** Mit dem Env-Override in `ShipPictureTests` (S12.0 E3) entfallen im Gate Tausch, `bin`-Leeren, Rebuild und Bin-Prüfung (`gate.swap`, `bin_problems`, ein Rebuild) – dann `appTag` in `tools/pins.json` auf das App-Release mit Override heben und `gate.py` vereinfachen. Die erwarteten Moduleinträge (`<schiff>_<modul>`) bleiben. Die App-Baseline wird `.1` (oder neuer), nicht der Seed: Die Bild-Baselines im App-Repo ändern sich für ~96 Schiffe.
 4. **T12.6 (Release):** „Erstes Data-Release `ships-2026.11` per Knopf“ und „erster echter Monatslauf per Knopf“ sind erledigt (Seed, Dispatch 1/2). Bleibt: App v0.6.0, Wiki, README beider Repos, `sc-ship-outlines` archivieren. Der Cron läuft seit T12.2 (D3), erster geplanter Lauf **1.12., 04:23 UTC** – **Sciirofs Freigabe für den Monatslauf steht weiter aus** (CLAUDE.md). Mit Branch + `--no-ff` ab T12.6: Branch-Protection mit Pflicht-Review macht SD12 neu prüfenswert, und `ci.yml` (Backlog) wird nötig.
 
-### [ ] T12.3 App: Datenkanal (im App-Repo)
+### [x] T12.3 App: Datenkanal (im App-Repo, erledigt 18.11.2026: `9e3c620`…`12a16d2`, D112)
 
 **Warum:** Ohne Leser ist das Release wertlos.
 - Manifest-Check nach dem Velopack-Check (eine URL `…/releases/latest/download/manifest.json`), `schemaVersion`-Prüfung (unbekannt → „Ship data needs app update“)
@@ -545,7 +545,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Akzeptanz:** Gate am Aufzug, SC im Vordergrund: Update einspielen, Galaxy erscheint, Holo lädt, Plan bleibt.
 
-### [ ] T12.4 App: Holo aus dem Manifest (im App-Repo)
+### [x] T12.4 App: Holo aus dem Manifest (im App-Repo, erledigt 18.11.2026: `06170bc`/`a8c4900`, D114)
 
 **Warum:** `HoloRelease.Tag` ist die letzte Konstante, die ein App-Release pro Datenänderung erzwingt.
 - Hashes aus dem Manifest, URL `…/releases/download/<dataVersion>/<file>` (kein `baseUrl`, SD2), `holo: null` → Umriss-Fallback, gelöschtes Release → Baseline-Holo
@@ -553,7 +553,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Akzeptanz:** Holo-Dateien aus `ships-*` byte-gleich zu holo-v3 (S12.0: Schwelle 0); Holo-Download aus `ships-*` statt `holo-v3`.
 
-### [ ] T12.5 App: Baseline aus dem Release (im App-Repo)
+### [x] T12.5 App: Baseline aus dem Release (im App-Repo, erledigt 18.11.2026: `46fd06d`/`39c3a50`, D113)
 
 **Warum:** Eine Quelle für Schiffsdaten; `ships/` als Quelltext im App-Repo ist der zweite Pfad, der v0.5.1 teuer machte.
 - `release.yml` lädt das aktuelle `ships-*`-Release ins ZIP, Tag im Manifest; `ci.yml` gegen eine feste Baseline
@@ -562,15 +562,51 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Akzeptanz:** Publish-Build lokal startet offline mit der Baseline; `git ls-files ships/` ist leer.
 
-### [ ] T12.6 Release
+### [x] T12.6 Release (erledigt 19.11.2026; aufgeteilt in T12.6a im App-Repo und T12.6b hier)
 
 **Warum:** Erst ein echtes Data-Release, dann die App, die es liest, dann der erste Monatslauf.
-- Erstes Data-Release `ships-2026.11` per Knopf (= Stand 4.10.3 / holo-v3)
-- **App:** v0.6.0 mit dieser Baseline, Wiki (Installation, Ships), README beider Repos, Notes
-- `sc-ship-outlines` archivieren; `holo-v3` im App-Repo bleibt bis v0.5.x ausgelaufen ist
-- Danach: erster echter Monatslauf per Knopf
+- [x] Erstes Data-Release `ships-2026.11` per Knopf (= Stand 4.10.3 / holo-v3) – Seed, T12.2 Befund 8 (18.11.)
+- [x] Erster echter Monatslauf per Knopf – Dispatch 1 → PR #1 → `ships-2026.11.1` (Läufe 44317285689, 44339569545), Dispatch 2 „nothing changed“ (44340334581); T12.2 Befund 11–13
+- [x] **App:** v0.6.0 mit der Baseline `ships-2026.11.1`, Wiki, README, Notes – App-T12.6a, Merge `b2dc6d6`, Tag `v0.6.0` (19.11.), Netz-Gate bestanden
+- [x] README dieses Repos, `sc-ship-outlines` archivieren → T12.6b (unten); `holo-v3` im App-Repo bleibt bis 31.01.2027 (App-D63-Addendum)
 
-**Akzeptanz:** Netz-Gate, SC im Vordergrund: v0.5.1 → v0.6.0 per Velopack, dann Data-Update im Overlay. Ab hier Branch + `--no-ff` für jede Änderung an diesem Repo.
+**Akzeptanz:** Netz-Gate, SC im Vordergrund: v0.5.1 → v0.6.0 per Velopack – bestanden (App-T12.6a, 19.11.). Das Data-Update im Overlay entfiel für v0.6.0 (Latest = Baseline, keine Ship-data-Zeile); den Kanal hat das T12.3-Gate belegt. Ab hier Branch + `--no-ff` für jede Änderung an diesem Repo.
+
+### [ ] T12.6b Shipdata-Abschluss (Plan freigegeben 19.11.2026 mit R1–R5, K1, E1, E2, `docs/plans/T12.6b-abschluss.md`, Branch `docs/p12-close`)
+
+**Warum:** Phase 12 ist technisch fertig; offen sind ein README für den 1.12. und den ersten PR, die erledigten Tasks, die Lehren der Phase, ein Backlog mit Anlässen und die Klicks, die nur Martin machen kann. Kein Code, kein Lauf, kein API-Ruf.
+- README; T12.3–T12.6 abhaken; Lehren; Backlog konsolidiert (inkl. Sciirofs Antwort vom 18.11.); SD13; SD3-Addendum; `cache/`-Hygiene; Martin-Klicks
+
+**Präzisierung in der Planphase, ratifiziert durch Freigabe:**
+1. **R1** SD3-Addendum: 4 Holos CPU-Rundung (Gate erwartet sie über den Holo-SHA) und `appTag` > v0.5.1 braucht den Gate-Umbau (Befund 1).
+2. **R2** Keine Schiffsdatei-PRs in diesem Repo (es hat kein `ships/`, jede Datei entsteht monatlich neu); README sagt das. Die Korrektur der App-Doku geht an die App-Doku-Session (Martin-Klick 4).
+3. **R3** Sciirof „is totally happy“ mit dem Monatslauf (Antwort 18.11.): CLAUDE.md-Zeile angepasst, Backlog „zieht die Freigabe zurück“.
+4. **R4** `NOTICE.md` in `files`: Anlass „nächste Manifest-Formatänderung“; „Legenden-Warnzeilen“ gestrichen (App-Backlog).
+5. **R5** „override obsolete“ als Backlog, Anlass „Lauf stoppt wegen Quellwechsel 135c (SD5 Fall 4)“. **K1** Manifest-Zeile 135c gezeigt (Befund 2).
+6. **E1** „Gate lokal“ als Anlass an der bestehenden Lehre, keine neue Zeile. **E2** `missingSince` getrennt für Cyclone und 600i EE (Befund 3).
+7. Zwei der Lehren aus dem Auftrag standen schon („Katalog-Rettung war Zeremonie“, „Kein Startprompt ohne Regeln“); sie bleiben, kein Duplikat.
+
+**T12.6b Befund (19.11.2026):** 0 API-Rufe, 0 Workflow-Läufe, 0 Modell-GET. Commits `8bb42d5` (Plan), `b1e4d29` (README), `f4467d1` (SD13, SD3), dieser Commit (TASKS, CLAUDE.md).
+1. **`appTag` > v0.5.1 braucht den Gate-Umbau.** `gate.py` tauscht die Daten in `app/ships` und `app/outlines/ship-outlines.json` des Checkouts; seit App-v0.6.0 gibt es `ships/` im App-Repo nicht mehr. SD3-Addendum, Backlog „Gate auf `CARGOPLAN_SHIP_DATA`“.
+2. **Regel „override obsolete“ fehlt.** `rules.import_findings` liest `overrides.json` nur bei Status `kept`; liefert der Katalog eine Transform, bleibt der Eintrag still stehen. Ein Stopp kommt trotzdem über SD5 Fall 4, nur mit dem Grund „Quellwechsel“ – **K1**, veröffentlichtes Manifest `ships-2026.11.1` (SHA `94129864f3ca`): `ships.135c` `source` „Fleetyards API (CIG ship matrix), export 2026-10-22“, `missingSince null`, `orderKeys null`; `holo.ships.orig-135c.model` **„fleetyards (holo-v1)“** ≠ `ORIG_135c`, also kein vergleichbarer Vorgänger.
+3. **E2, Markierung im Manifest:** `600i_executive_edition` `source` Fleetyards, **`missingSince 2026-11-18`**, `follows null`, Holo-`model` „fleetyards (holo-v1)“ – sie zählt als verschwunden, obwohl sie nie ein Motherlode-Modell hatte; die „> 3 Läufe“-Regel träfe sie nach dem 1.02.-Lauf, gemeint ist aber Sciirofs Antwort. `cyclone` `source` Motherlode 4.10.2, `missingSince 2026-11-18`, Holo-`model` `TMBL_Cyclone`.
+4. **Schiffsdatei-PRs:** App-CONTRIBUTING, `docs/ship-format.md` (Abschnitt zum PR, Überschrift „The three Fleetyards ships“) und `ship-correction.yml` versprechen einen PR mit JSON-Datei in `ships/` dieses Repos; das gibt es nicht (R2).
+5. **SD12** steht in `decisions.md` (unverändert). SD9 steht hinter SD12 – bleibt so (Geschichte).
+6. **`cache/`-Hygiene:** `spike/` existiert nicht mehr (damit auch `spike/rescue-cert.pem`); `git ls-files '*.pem'` leer; `git check-ignore -v` → `.gitignore:10:cache/` für `cache/rescue/key.pem` und `cache/app-checkout` – bleiben lokal.
+7. **Repo-Einstellungen gelesen** (`gh api`, 19.11.): Shipdata `delete_branch_on_merge: false`, `has_issues: true`; `sc-ship-outlines` `archived: false`, privat. Remote-Branch `data/2026.11` (PR #1, gemergt) liegt noch.
+8. **pytest** komplett (WSL, Pins, `tools/local-wsl.sh test`, auf `f4467d1` + TASKS-Entwurf): `============================= 171 passed in 53.74s =============================` – Docs-only, Zahl wie zum Abschluss von T12.2.
+
+**Martin-Klicks:**
+1. `sc-ship-outlines` archivieren: Settings → General → Danger Zone → **Archive this repository**.
+2. Shipdata-Repo: Settings → General → Pull Requests → **Automatically delete head branches**; danach in PR #1 **Delete branch** für `data/2026.11` (die Einstellung wirkt nicht rückwirkend) und die Backlog-Zeile „`data/*`-Branch löschen“ streichen.
+3. **Nachricht an Sciirof** (Entwurf, Englisch):
+   > Hi Sciirof, thanks again for being happy with the monthly run – it is live now: the first run on 1 December at 04:23 UTC calls `/cargo-grids` once and builds from it, and the data reach SC-CargoPlan v0.6.0 as a monthly release. Two things I'm looking forward to from your answer: the model URL in the `/cargo-grids` response (could you tell me the field name once it's there? I'll read it next to the page for a month, then drop the page scraper) and the transform for the 135c (the pipeline will stop and ask me when it arrives, so nothing changes silently). The one model I'm still missing is the **600i Executive Edition** – it is the last ship we still take from Fleetyards. And if you prefer wrong-grid reports to reach you in a particular way, tell me and I'll point people there.
+4. **App-Doku-Session** (R2): CONTRIBUTING „Correct ship data“, `docs/ship-format.md` (PR-Abschnitt, Überschrift „The three Fleetyards ships“) und `ship-correction.yml` auf „Issue statt Schiffsdatei-PR, wir melden an Motherlode“ ziehen; dazu dort T12.6b abhaken und Phase 12 schließen.
+
+**Akzeptanz:**
+- [ ] README beantwortet in zwei Minuten „was passiert am 1.12.“ und „was mache ich, wenn ein PR kommt“ – Martin liest einmal gegen
+- [ ] TASKS.md: Phase 12 geschlossen, Backlog mit Anlässen, keine offenen `[ ]` außer Backlog
+- [ ] Merge `--no-ff` nach Freigabe, Push durch CC (Shipdata-Regel)
 
 ---
 
@@ -580,7 +616,7 @@ Regeln aus Fehlern, die durchgerutscht sind. Gelten für jeden Task. Übernommen
 
 - **Vor jedem Push `gh run list -L 3`.** Rote Läufe erst klären, dann pushen.
 - **Tests vor der Implementierung heißt: erst rot sehen.**
-- **Mess- und Gate-Befehle selbst einmal laufen lassen, bevor Martin sie bekommt.** Hier: jeden Workflow einmal per Dispatch selbst lesen, bevor er als fertig gilt.
+- **Mess- und Gate-Befehle selbst einmal laufen lassen, bevor Martin sie bekommt.** Hier: jeden Workflow einmal per Dispatch selbst lesen, bevor er als fertig gilt – und das Gate erst lokal, dann auf dem Runner. Anlass T12.2 Block 10: Der lokale Gate-Lauf war rot an `aurora_mk_ii_ts_module` (Moduleintrag der App, den `expected_ids` nicht kannte); ein Runner-Lauf wäre genau dort rot gewesen.
 - **Fremd-Framework zuerst als Spike mit Gates am echten Layout** (S11.0). Hier: S12.0 vor jedem Prod-Code.
 - **Bei fremden CLIs heißt „leer“ oft „nicht gesetzt“.** Gilt für `gh`, `actions/cache`, `setup-python`.
 - **Ein Skript für lokal und CI.** `run.py` ist der einzige Einstieg; `ship-data.yml` ruft nur Unterbefehle.
@@ -589,6 +625,9 @@ Regeln aus Fehlern, die durchgerutscht sind. Gelten für jeden Task. Übernommen
 - **Jede Regel einmal provozieren, nicht nur rot durch fehlenden Code.** Anlass 17.11. (T12.1): Zwei von 14 Tests blieben grün, obwohl die Regel kaputt war. Beim 404-Test fing die Hash-Prüfung denselben Fall ab; beim Key-Test glich der Alt-Key zufällig der Ableitung.
 - **Katalog-Rettung war Zeremonie.** Anlass 17.11. (T12.1): ein eigener Workflow, `openssl cms`-Verschlüsselung und ein Artifact, um einen Katalog aus dem Actions-Cache zu holen. Ein lokaler API-Ruf hätte dasselbe geliefert. Die Regel heißt „API **einmal pro Lauf**“, nicht „nie“: ein lokaler Ruf ist ein Lauf und billiger als jeder Rettungs-Workflow.
 - **Keine Logik in YAML-Schritten.** Anlass 17.11. (S12.0): zwei rote Läufe – ein ungepinntes Runner-Image und Inline-Code, der vor dem Runner nie gelaufen war. Workflow-Schritte rufen Skripte; die Skripte laufen vorher lokal in WSL Ubuntu 24.04 mit denselben Pins.
+- **Text über Shell-Grenzen als Datei oder Argumentliste, nie als Heredoc.** Anlass T12.2 Block 8: Eine Provokation ging PowerShell → `wsl` → bash, das `\1` überlebte den Weg nicht, und der Ersatz löschte einen Job statt `runs-on` zu ändern – die Provokation war keine. Muster: Python-Skript mit Argumentliste; Commit-Messages per `git commit -F <datei>`.
+- **Repo-Einstellungen in der Probe lesen, nicht nur Code.** Anlass T12.2 Dispatch 1: rot in `gh pr create`, weil „Allow GitHub Actions to create and approve pull requests“ aus war (SD12); die lokale Probe hatte nur `immutable-releases` gelesen. Jede Einstellung, auf die ein Job baut, steht im README und wird vor dem ersten Lauf per `gh api` gelesen.
+- **Byte-gleich über Maschinen ist kein Gate; hash-gleich im selben Job schon.** Anlass T12.2 Befund 10: gleiche Modelle, gleiche Pins, beide Ubuntu 24.04 – und 4 von 98 Holos zwischen WSL und Runner ±6–50 B anders. Die Bilder des Gates entstehen beide im selben Job und sind dort hash-exakt (SD3, Addendum T12.6b); ein Vergleich gegen eine Datei von einer anderen Maschine wäre an diesen 4 rot geworden.
 
 ---
 
@@ -596,13 +635,31 @@ Regeln aus Fehlern, die durchgerutscht sind. Gelten für jeden Task. Übernommen
 
 Kein Plan, sondern Reaktion: wird erst zum Task, wenn der Anlass eintritt.
 
-- **Sciirof liefert einen Modell-Endpunkt** → Scraper raus, `fetch` liest URLs aus der API (SD-Eintrag).
-- **Sciirof lehnt den Monatslauf ab** → Cadence auf Dispatch-only, Martin drückt den Knopf; Zielbild bleibt.
-- **Seite `cryon.rocks/ops/cargo` ändert sich** → Pipeline meldet PR „model URLs unavailable“, letzter Stand bleibt (A11).
-- **Ein Schiff > 3 Läufe `missingSince`** → Zeile hier, Entscheidung Martin: behalten oder aus dem Manifest nehmen.
-- **PAT für den PR-Pfad**, falls „Approve workflows to run“ bei jedem PR stört.
-- **Holo-Kette CPU-unabhängig byte-gleich** (T12.2, Dispatch 1): 4 / 98 Holos weichen zwischen WSL und Runner um ±6–50 B ab, Metriken gleich. Anlass: Release-Churn stört (Holos „erneuert“ ohne Modelländerung) oder der Judge kippt auf einer Rundung. Erst messen, wo die Kette auseinanderläuft (Flatten, Cull, Export).
-- **`ci.yml`** – `pytest` bei Push und PR, getrennt vom Datenlauf (E2, T12.2). Anlass: ein Code-PR (ab T12.6 Branch + `--no-ff`) würde ohne Testlauf gemergt; heute läuft `pytest` nur im Job `chain` von `ship-data.yml`.
-- **Holo-Kill-Switch** (CIG oder Sciirof sagt Stopp): `holo: null` im nächsten Release, Assets der letzten zwei Releases löschen.
-- **Legenden-Warnzeilen** aus v0.5.1 – App-Thema, nicht hier (Verweis).
-- **WSL-Werkzeuge unter `/root` (fragil).** Anlass T12.1: der WSL-Standardbenutzer wechselte während der Session von `root` auf `artiniediger`; die Werkzeuge liegen unter `/root/s12tools`, `local-wsl.sh` läuft nur mit `wsl -u root` und braucht den `safe.directory`-Umweg. Reaktion, sobald es wieder hakt: Werkzeuge unter den Standardbenutzer (`SHIPDATA_TOOLS`) neu aufsetzen.
+Konsolidiert in T12.6b (19.11.2026). Jede Zeile: **was** – Anlass – Herkunft.
+
+**Quelle Motherlode (Sciirof)**
+- **Modell-URL aus der `/cargo-grids`-Antwort** (ersetzt „Modell-Endpunkt“): `fetch` liest das Feld, wenn es da ist, sonst die Seite; die Summary zählt „from API / from page“; einen Monat beides, dann Scraper raus (SD-Eintrag). – **Anlass:** das Feld erscheint in der API (Feldname unbekannt, Task erst dann). – Sciirof 18.11.
+- **Regel „override obsolete“:** liefert der Katalog eine Transform für ein Schiff aus `overrides.json`, endet der Lauf mit Stopp → PR „override obsolete“, der den Eintrag entfernt; nie still. Test, einmal provoziert rot. Heute fehlt die Regel (`rules.import_findings` liest `overrides.json` nur bei `kept`), der Stopp käme nur über SD5 Fall 4 mit dem Grund „Quellwechsel“. – **Anlass:** ein Lauf stoppt wegen Quellwechsel 135c (SD5 Fall 4; Holo-`model` heute „fleetyards (holo-v1)“, T12.6b Befund 2). – Sciirof 18.11. (135c-Transform angekündigt)
+- **600i Executive Edition** (`missingSince 2026-11-18`, Fleetyards-Daten, nie ein Motherlode-Modell): mit Modell läuft sie wie die F7C (SD5 Fall 4 → PR); die „> 3 Läufe“-Regel unten gilt für sie nicht. – **Anlass:** Sciirofs Antwort zum Modell (Nachricht T12.6b, Martin-Klick 3). – T12.6b Befund 3
+- **Cyclone** (`missingSince 2026-11-18`, Motherlode 4.10.2): kommt sie zurück, deckt SD6 „wieder da“ es ab, kein Task. – **Anlass:** 3 Läufe ohne sie (nach dem Lauf am 1.02.2027) → Entscheidung Martin wie unten. – Sciirof 18.11.
+- **Ein Schiff > 3 Läufe `missingSince`** → Zeile hier, Entscheidung Martin: behalten oder aus dem Manifest nehmen. – **Anlass:** der vierte Lauf ohne das Schiff. – SD6
+- **Seite `cryon.rocks/ops/cargo` ändert sich** → Pipeline meldet PR „model URLs unavailable“, letzter Stand bleibt (A11). – **Anlass:** der PR kommt. – S12.0
+- **Sciirof zieht die Freigabe des Monatslaufs zurück** (erteilt 18.11.: „totally happy“) → Cron raus, Dispatch-only, Martin drückt den Knopf; Zielbild bleibt. – **Anlass:** seine Nachricht. – T12.6b R3
+- **Holo-Kill-Switch** (CIG oder Sciirof sagt Stopp): `holo: null` im nächsten Release, Assets der letzten zwei Releases löschen. – **Anlass:** die Ansage. – SD2
+
+**Gate und Pins**
+- **Gate auf `CARGOPLAN_SHIP_DATA`** statt Tausch in `ships/`/`outlines/` des App-Checkouts (S12.0 E3, seit App-v0.6.0 möglich): `gate.swap`, `bin_problems` und ein Rebuild fallen weg, die Moduleinträge bleiben. – **Anlass:** der nächste Gate-Umbau, spätestens jeder `appTag` > v0.5.1 (SD3-Addendum T12.6b). – T12.2 „ändert sich an T12.5“
+- **4 Holos CPU-Rundung** (geschärft aus „Holo-Kette CPU-unabhängig byte-gleich“): 4 / 98 Holos weichen zwischen WSL und Runner um ±6–50 B ab, Metriken gleich; erst messen, wo die Kette auseinanderläuft (Flatten, Cull, Export). – **Anlass:** Release-Churn stört (Holos „erneuert“ ohne Modelländerung) oder der Judge kippt auf einer Rundung. – T12.2 Befund 10, SD3-Addendum
+- **Matrix/Parallelität der Kette.** Heute `build` 61 min (Lauf 1) bis 86 min (Lauf 2, Runner-Streuung +41 %), Job-Timeout 150 min. – **Anlass:** `build --all` > 100 min. – T12.2 Befund 10/11
+- **Werkzeug-Pin-Bump** (Python, Node, numpy, OpenCV, meshoptimizer, Runner): eigener Task mit `build --all` und Messung, nie nebenbei (README „Pins and pin bumps“). – **Anlass:** Sicherheitswarnung (SD8-Addendum) oder `ubuntu-24.04` läuft aus. – SD8
+- **WSL-Werkzeuge unter `/root` (fragil).** Der WSL-Standardbenutzer wechselte in T12.1 von `root` auf `artiniediger`; die Werkzeuge liegen unter `/root/s12tools`, `local-wsl.sh` läuft nur mit `wsl -u root` und braucht den `safe.directory`-Umweg. Reaktion: Werkzeuge unter den Standardbenutzer (`SHIPDATA_TOOLS`) neu aufsetzen. – **Anlass:** es hakt wieder. – T12.1
+
+**Format und Vertrag**
+- **`NOTICE.md` in `files`** des Manifests (heute nur ZIP-Inhalt; `NOTICE.md` ist Asset ohne Hash im Vertrag). – **Anlass:** die nächste Manifest-Formatänderung (SD2-Addendum). – T12.6b R4
+- **Holo-Formatwechsel** = `holo.formatVersion` hochzählen + SD-Eintrag, **kein** `schemaVersion`-Bump (SD13). – **Anlass:** ein neues Holo-Format. – App-T12.4 R1
+
+**Repo und Abläufe**
+- **`ci.yml`** – `pytest` auf `pull_request` (und Push), getrennt vom Datenlauf; heute läuft `pytest` nur im Job `chain` von `ship-data.yml`. – **Anlass:** der erste Code-PR. – T12.2 E2
+- **Pin-Bump-PR ins App-Repo aus der Pipeline:** nach einem Release öffnet die Pipeline im App-Repo einen PR auf `build/ship-data.json` (braucht ein Token mit Rechten dort). – **Anlass:** der zweite Monat mit Release. – App-T12.5
+- **`data/*`-Branch nach dem Merge löschen.** – **Anlass:** entfällt, sobald Martin „Automatically delete head branches“ klickt (T12.6b Martin-Klick 2) → Zeile streichen. – T12.2 PR #1
+- **PAT oder GitHub App für den PR-Pfad** statt der Repo-Einstellung aus SD12 (die erlaubt Workflows auch das Approven). – **Anlass:** Branch-Protection mit Pflicht-Review auf `main`. – SD12
