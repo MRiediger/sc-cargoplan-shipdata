@@ -28,6 +28,7 @@ Architekturentscheidungen der Schiffsdaten-Pipeline mit ihren Abwägungen, numme
 - **Messung (S12.0, Lauf 3):** selbe VM alt↔neu **1 414 / 1 414** Bilder ohne 100i gleich, gesamt 1 427 / 1 427, Placement 108 / 108; VM↔VM und lokal↔Runner ebenfalls 1 427 / 1 427. „Anders“ (holo-v2↔v3, 96 Paare): Pixelanteil min **8,3 · 10⁻⁵**; **Lücke 0 gegen 8,3 · 10⁻⁵**. SSIM trennt erst in der 6. Nachkommastelle (max 0,999998) und fällt weg. Gate-Job ≈ 10 min (B0 271 s, B 139 s).
 - **Gegenargument:** Zwei Bildläufe pro Lauf kosten ≈ 7 min Windows-Zeit, und der Job hängt am Cross-Repo-Checkout (SD1). Hash-exakt heißt: auch ein harmloser Re-Export ändert Bilder; das Gate sagt dann nur „anders“, das „wie schlimm“ bleibt dem Judge (SD5).
 - **Konsequenz:** Keine gespeicherte Baseline, kein Runner-Pin fürs Gate. Ein neuer App-Tag ist ein gewöhnlicher Commit in `tools/pins.json`; Renderer-Regressionen prüft das App-Repo selbst (App-D90).
+- **Addendum T12.6b (19.11.2026):** (1) **Holos sind über Maschinen nicht byte-gleich:** 4 von 98 weichen zwischen WSL und Runner um ±6–50 B ab (gleiche Modelle und Pins, vermutlich CPU-Rundung; T12.2 Befund 10). Das Gate erwartet sie über den Holo-SHA im Manifest und bleibt hash-exakt, weil beide Stände im selben Job entstehen; die Folge ist nur Churn (Backlog). (2) **Ein App-Tag über v0.5.1 ist kein gewöhnlicher Commit mehr:** `gate.py` tauscht die Daten in `ships/` und `outlines/` des App-Checkouts, und seit App-v0.6.0 (App-T12.5, D113) gibt es `ships/` im App-Repo nicht mehr. Jeder neuere `appTag` braucht vorher den Gate-Umbau auf `CARGOPLAN_SHIP_DATA` (Backlog); die Konsequenz oben gilt nur bis dahin.
 
 ## SD4 – Release-Reihe `ships-YYYY.MM[.N]`, Pre-Release aus, letzte zwei bleiben, flaches Asset-Layout
 
@@ -101,3 +102,11 @@ Architekturentscheidungen der Schiffsdaten-Pipeline mit ihren Abwägungen, numme
 - **Entscheidung:** **Jeder Lauf schreibt `state/last-run.json`** (Datum, Lauf-ID, Ergebnis, geprüft / gefunden / zu tun) und committet sie, auch wenn sich nichts geändert hat; die Datei ist zugleich die Zusammenfassung des letzten Laufs im Repo.
 - **Gegenargument:** Zwölf Commits im Jahr ohne Codeänderung machen die Historie lauter, und der Lauf braucht `contents: write` auf `main` – derselbe Token könnte mehr schreiben.
 - **Konsequenz:** Kein Zustand, der nur lokal existiert: Zähler und Herkunft stehen im Manifest (SD2), das Lebenszeichen in `state/`. Den Schreiber baut T12.2; bis dahin gibt es `state/` nicht.
+
+## SD13 – Holo-Formatwechsel: `holo.formatVersion` und ein SD-Eintrag, kein `schemaVersion`-Bump
+
+- **Kontext:** App-T12.4 R1 (18.11.): Ein Manifest mit `holo.formatVersion ≠ 2` ist für die App **nicht** ungültig, sondern heißt „kein Holo für diese App“ (`HoloOffer.UnknownFormat`): Schiffe und Racks kommen, statt des Holos zeigt sie den Umriss. `schemaVersion` beschreibt dagegen die Schiffs-JSON; eine unbekannte Version lehnt die App ab („Ship data … needs an app update“, `ShipDataGate`).
+- **Optionen:** neues Holo-Format als `schemaVersion`-Bump; als `formatVersion`-Bump; einen Übergang lang beide Formate im Release.
+- **Entscheidung:** **Ein neues Holo-Format zählt `holo.formatVersion` hoch und bekommt einen eigenen SD-Eintrag** (Format, App-Release, das es liest, Messung). `schemaVersion` bleibt der Schiffs-JSON vorbehalten; ihr Bump geht weiter nur zusammen mit einem App-Release (CLAUDE.md).
+- **Gegenargument:** Eine ältere App holt einen Datenstand, dessen Holos sie nie zeigt, und fällt still auf den Umriss zurück, bis der Nutzer die App aktualisiert. Ein Übergangsmonat mit beiden Formaten vermiede das, verdoppelt aber die Holo-Assets und braucht Code für zwei Ketten.
+- **Konsequenz:** Ein Formatwechsel blockiert nie die Schiffsdaten älterer Apps. Der SD-Eintrag nennt, ab welcher App-Version das neue Format gelesen wird; die Release-Notes der App sagen es den Nutzern. Backlog-Zeile „Holo-Formatwechsel“ verweist hierher.
