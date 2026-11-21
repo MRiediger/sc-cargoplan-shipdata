@@ -1,0 +1,268 @@
+{
+ "schemaVersion": 1,
+ "about": "Contract place names -> starmap entries (H1, SD14; tools/shipdata/hauling/positions.py). {uuid, starmap}: resolved by uuid, the pool carries the starmap name, the contract form goes into contractNames (K1). {drop}: not a place with a position (V6), taken out of the pool. note: why, for people. A gap is proposed by hauling-pr on data/hauling-aliases; the merge extends this table.",
+ "aliases": {
+  "Abandoned Facility": {
+   "drop": "a named surface site the starmap does not have"
+  },
+  "Aspire Grand": {
+   "uuid": "122e8057-831d-4517-a23b-0eb8382b90a2",
+   "starmap": "New Babbage",
+   "note": "hotel in New Babbage (game knowledge, not in the starmap: check)"
+  },
+  "August Dunlow Spaceport": {
+   "uuid": "567f92d7-d34c-42fa-b57b-f1939d4c5f5b",
+   "starmap": "Orison",
+   "note": "spaceport of Orison (game knowledge, not in the starmap: check)"
+  },
+  "Bloodshot Ridge": {
+   "drop": "a named surface site the starmap does not have"
+  },
+  "Caterpillar wreck site": {
+   "drop": "a generic wreck site: no single position"
+  },
+  "Checkmate at the L4 Lagrange of Pyro II": {
+   "uuid": "07463f54-4ecd-4323-8a28-fb65b8a4ebca",
+   "starmap": "Checkmate",
+   "note": "Pyro long form: the station"
+  },
+  "Clio Derelict Outpost": {
+   "uuid": "2a21d86f-ebf0-4052-a134-c414c9998592",
+   "starmap": "Clio",
+   "note": "a derelict outpost on Clio: the body (not in the starmap itself)"
+  },
+  "Constellation wreck site": {
+   "drop": "a generic wreck site: no single position"
+  },
+  "Covalex Distribution Center S1DC06": {
+   "uuid": "54a7fb84-3d4b-49ca-9b70-6f13bac89c54",
+   "starmap": "Covalex Distribution Centre S1DC06",
+   "note": "spelling: Centre in the starmap"
+  },
+  "Covalex Distribution Center S4DC05": {
+   "uuid": "bbd375a3-fb46-4fbb-b3cf-9cac50bc29a4",
+   "starmap": "Covalex Distribution Centre S4DC05",
+   "note": "spelling: Centre in the starmap"
+  },
+  "Covalex Station Gundo": {
+   "uuid": "6dbbb484-2aca-419f-b5ef-8f1efde030e3",
+   "starmap": "Covalex Shipping Hub Gundo",
+   "note": "the starmap names it Shipping Hub"
+  },
+  "Cutlass wreck site": {
+   "drop": "a generic wreck site: no single position"
+  },
+  "Daymar Derelict Outpost": {
+   "uuid": "e658b2b1-fae7-4945-89b8-b332f235d59b",
+   "starmap": "Daymar",
+   "note": "a derelict outpost on Daymar: the body (not in the starmap itself)"
+  },
+  "Derelict Outpost": {
+   "drop": "a generic name: no single starmap entry in Stanton"
+  },
+  "Dudley & Daughters at the L4 Lagrange of Pyro VI": {
+   "uuid": "a88ae72e-15e9-43da-8a20-c14cc851d2da",
+   "starmap": "Dudley & Daughters",
+   "note": "Pyro long form: the station"
+  },
+  "Endgame at the L3 Lagrange of Pyro VI": {
+   "uuid": "b6771617-3965-4663-bb53-5f595ab1c761",
+   "starmap": "Endgame",
+   "note": "Pyro long form: the station"
+  },
+  "Euterpe Derelict Outpost": {
+   "uuid": "732dedf3-9530-4972-98ab-2fcae64669db",
+   "starmap": "Euterpe",
+   "note": "a derelict outpost on Euterpe: the body (not in the starmap itself)"
+  },
+  "Exterior Zone 2": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Freelancer wreck site": {
+   "drop": "a generic wreck site: no single position"
+  },
+  "Gaslight at the L2 Lagrange of Pyro V": {
+   "uuid": "beaadc7f-9f3c-4a2d-8dd6-f56d57de1c60",
+   "starmap": "Gaslight",
+   "note": "Pyro long form: the station"
+  },
+  "Hurston Derelict Outpost": {
+   "uuid": "551af60b-7727-4936-acc7-763d25d7a1de",
+   "starmap": "Hurston",
+   "note": "a derelict outpost on Hurston: the body (not in the starmap itself)"
+  },
+  "Inventory Center": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Ita Derelict Outpost": {
+   "uuid": "11368ee6-a2de-4948-a9b0-608ce565f3e3",
+   "starmap": "Ita",
+   "note": "a derelict outpost on Ita: the body (not in the starmap itself)"
+  },
+  "L19 Admin Office in Lorville": {
+   "uuid": "f1759f46-e3c0-4dc1-94bc-c94488b58913",
+   "starmap": "Lorville",
+   "note": "a place inside Lorville"
+  },
+  "L19 Habs in Lorville": {
+   "uuid": "f1759f46-e3c0-4dc1-94bc-c94488b58913",
+   "starmap": "Lorville",
+   "note": "a place inside Lorville"
+  },
+  "L19 Metro Station in Lorville": {
+   "uuid": "f1759f46-e3c0-4dc1-94bc-c94488b58913",
+   "starmap": "Lorville",
+   "note": "a place inside Lorville"
+  },
+  "Lobby": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Lyria Derelict Outpost": {
+   "uuid": "452de0e6-e31d-4e2c-b249-1c4244cb713b",
+   "starmap": "Lyria",
+   "note": "a derelict outpost on Lyria: the body (not in the starmap itself)"
+  },
+  "Magda Derelict Outpost": {
+   "uuid": "6f22b292-38d6-4429-b504-99b39514a2f8",
+   "starmap": "Magda",
+   "note": "a derelict outpost on Magda: the body (not in the starmap itself)"
+  },
+  "Magnus Gateway": {
+   "drop": "no Magnus Gateway in the starmap of 4.10.3 (only a hidden clinic of that name)"
+  },
+  "Maria Pure of Heart": {
+   "uuid": "f1759f46-e3c0-4dc1-94bc-c94488b58913",
+   "starmap": "Lorville",
+   "note": "hospital in Lorville (game knowledge, not in the starmap: check)"
+  },
+  "Megumi Refueling at the L5 Lagrange of Pyro VI": {
+   "uuid": "82a8afd8-cd0a-4f5b-b448-35fa1214684e",
+   "starmap": "Megumi Refueling",
+   "note": "Pyro long form: the station"
+  },
+  "Moreland Hills": {
+   "drop": "a named surface site the starmap does not have"
+  },
+  "NB Int. Spaceport": {
+   "uuid": "122e8057-831d-4517-a23b-0eb8382b90a2",
+   "starmap": "New Babbage",
+   "note": "spaceport of New Babbage (game knowledge, not in the starmap: check)"
+  },
+  "On-Call Area": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Orbituary above Pyro III": {
+   "uuid": "28e220ba-ba74-42eb-bae5-382475eba65d",
+   "starmap": "Orbituary",
+   "note": "Pyro long form: the station"
+  },
+  "Patch City at the L3 Lagrange of Pyro III": {
+   "uuid": "430316d5-f330-4e6c-93b8-823a062689db",
+   "starmap": "Patch City",
+   "note": "Pyro long form: the station"
+  },
+  "Pyro Gateway": {
+   "uuid": "59b22155-405f-4785-9f73-d2028b46f5c3",
+   "starmap": "Pyro Gateway",
+   "note": "interstellar Covalex templates leave from Stanton: the gateway in Stanton (assumption: check)"
+  },
+  "Rat's Nest at the L5 Lagrange of Pyro V": {
+   "uuid": "5e241629-e58f-4c15-b938-acc2cc287cd4",
+   "starmap": "Rat's Nest",
+   "note": "Pyro long form: the station"
+  },
+  "Razor's Edge": {
+   "drop": "a named surface site the starmap does not have"
+  },
+  "Reclamation and Disposal in Lorville": {
+   "uuid": "f1759f46-e3c0-4dc1-94bc-c94488b58913",
+   "starmap": "Lorville",
+   "note": "a place inside Lorville"
+  },
+  "Riker Memorial Spaceport": {
+   "uuid": "c6535844-c615-494e-9dc1-c2d0c6e7190a",
+   "starmap": "Area18",
+   "note": "spaceport of Area18 (game knowledge, not in the starmap: check)"
+  },
+  "Rod's Fuel 'N Supplies at the L4 Lagrange of Pyro V": {
+   "uuid": "1711f3cc-59ef-4b08-a762-19d8691ae268",
+   "starmap": "Rod's Fuel 'N Supplies",
+   "note": "Pyro long form: the station"
+  },
+  "Ruin Station above Pyro VI": {
+   "uuid": "1c585a2e-73c4-4bc5-8922-e0b434b8c8ea",
+   "starmap": "Ruin Station",
+   "note": "Pyro long form: the station"
+  },
+  "Security Checkpoint": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Security Compound": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Shipping Area": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Staging Point": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Starfarer wreck site": {
+   "drop": "a generic wreck site: no single position"
+  },
+  "Storehouse": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Supply Room": {
+   "drop": "a room or zone inside a location (placeholder text), not a place"
+  },
+  "Teasa Spaceport": {
+   "uuid": "f1759f46-e3c0-4dc1-94bc-c94488b58913",
+   "starmap": "Lorville",
+   "note": "spaceport of Lorville (game knowledge, not in the starmap: check)"
+  },
+  "The cave can only be accessed on foot.": {
+   "drop": "description text, not a place"
+  },
+  "Wala Derelict Outpost": {
+   "uuid": "d6f1ccd9-fbfb-4086-9608-8466ef2c1c93",
+   "starmap": "Wala",
+   "note": "a derelict outpost on Wala: the body (not in the starmap itself)"
+  },
+  "Wallace's Lab at Grim HEX": {
+   "uuid": "8cda0b9b-22a8-43fe-ac33-df7a1ba9434d",
+   "starmap": "Grim HEX",
+   "note": "a place inside Grim HEX"
+  },
+  "Whistler's Crypt": {
+   "drop": "a named surface site the starmap does not have"
+  },
+  "Yela Derelict Outpost": {
+   "uuid": "ee63a520-43df-4e1c-8af7-8b8df06b3dd2",
+   "starmap": "Yela",
+   "note": "a derelict outpost on Yela: the body (not in the starmap itself)"
+  },
+  "a Landing Pad Locker in New Babbage": {
+   "uuid": "122e8057-831d-4517-a23b-0eb8382b90a2",
+   "starmap": "New Babbage",
+   "note": "a place inside New Babbage"
+  },
+  "a Landing Pad Locker in Orison": {
+   "uuid": "567f92d7-d34c-42fa-b57b-f1939d4c5f5b",
+   "starmap": "Orison",
+   "note": "a place inside Orison"
+  },
+  "a Private Landing Pad": {
+   "drop": "a generic name: no single position"
+  },
+  "a Salvage Yard on Daymar": {
+   "uuid": "e658b2b1-fae7-4945-89b8-b332f235d59b",
+   "starmap": "Daymar",
+   "note": "a site on Daymar: the moon"
+  },
+  "microTech Derelict Outpost": {
+   "uuid": "5a529db7-1a4e-45b0-bdcb-a5a0c7a7fc57",
+   "starmap": "microTech",
+   "note": "a derelict outpost on microTech: the body (not in the starmap itself)"
+  }
+ }
+}
