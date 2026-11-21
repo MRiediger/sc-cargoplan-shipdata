@@ -1,14 +1,19 @@
 # sc-cargoplan-shipdata
 
 Ship data for [SC-CargoPlan](https://github.com/MRiediger/sc-cargoplan): cargo racks, outlines and holograms of every
-Star Citizen ship, built each month from the Motherlode catalog (cryon.rocks) and published as a data release
-`ships-YYYY.MM[.N]` ([releases](https://github.com/MRiediger/sc-cargoplan-shipdata/releases)). The app checks for a newer
-release on start and offers it; nobody installs anything by hand.
+Star Citizen ship, built each month from the Motherlode catalog (cryon.rocks), and the hauling contract templates and
+station positions for the app's route planner, from the game files as the Star Citizen Wiki publishes them
+([StarCitizenWiki/scunpacked-data](https://github.com/StarCitizenWiki/scunpacked-data), extracted with
+[octfx/ScDataDumper](https://github.com/octfx/ScDataDumper); also served by
+[api.star-citizen.wiki](https://api.star-citizen.wiki)). Published as a data release `ships-YYYY.MM[.N]`
+([releases](https://github.com/MRiediger/sc-cargoplan-shipdata/releases)). The app checks for a newer release on start
+and offers it; nobody installs anything by hand.
 
 ## What happens on the 1st
 
 The workflow `ship-data.yml` runs on the 1st of every month at 04:23 UTC. It calls the Motherlode API
-once, compares the catalog with the last release and ends in one of three ways:
+once, reads the hauling data, compares both with the last release and ends in one of three ways (a change of the
+hauling data alone also makes a release):
 
 | Result | What you see | What you do |
 |---|---|---|
@@ -21,6 +26,14 @@ valid. That means the pipeline itself is wrong, not the data; the fix is a code 
 
 Every run, red ones included, writes one line to [`state/last-run.json`](state/last-run.json) (`result`, `line`, the
 link to the run). That file is the first place to look.
+
+**The hauling data never hold up the ship data.** If their part fails, the release goes out with the last release's
+hauling files (or none), and you get one of two things:
+
+| You get | Means | What you do |
+|---|---|---|
+| a PR from `data/hauling-aliases` | contract place names the starmap does not know; the PR proposes an entry for each in `tools/hauling-aliases.json` | read the table; **merge** if the proposals are right (edit an entry in the PR first if not); the data follow with the next run (dispatch it, or wait for the 1st) |
+| an issue *Hauling job failed* | anything else (source down, a new rank or size word in a title, a failed check, a crash); each failed run adds a comment | read the cause; it is a code change, a contract change in the app, or the source came back on its own |
 
 ## When a PR comes
 
@@ -78,8 +91,8 @@ The run is reproducible only with the same tool versions. Each pin has one machi
 ## Licenses
 
 - **Code** (`tools/`, `tests/`, workflows): MIT, see [`LICENSE`](LICENSE).
-- **Data** (ship files, outlines, holograms in the releases): derived from Star Citizen game files and **not** covered
-  by the MIT license. See [`NOTICE.md`](NOTICE.md).
+- **Data** (ship files, outlines, holograms, hauling templates and positions in the releases): derived from Star Citizen
+  game files and **not** covered by the MIT license. See [`NOTICE.md`](NOTICE.md).
 
 Catalogs, models, pictures and holograms are never committed to this repository. They live only in the gitignored
 `cache/` and in release assets.
@@ -88,27 +101,30 @@ Catalogs, models, pictures and holograms are never committed to this repository.
 
 | Job | Runner | Does |
 |---|---|---|
-| `chain` | ubuntu-24.04 | tests, `fetch` (the one API call), `previous`, `diff`, `build`, `verify --ci`, `draft` (the release as a draft, `manifest.json` uploaded last) |
+| `chain` | ubuntu-24.04 | tests, `fetch` (the one API call), `previous`, `hauling` (may fail without stopping the job), `diff`, `build`, `verify --ci`, `draft` (the release as a draft, `manifest.json` uploaded last) |
 | `gate` | windows-latest | renders the last release and the draft with the same app (`sc-cargoplan` at `appTag`), hash-exact; contact sheets to the draft |
 | `publish` / `pr` | ubuntu-24.04 | after a green gate: publish the draft (the last two releases stay), or open the PR |
+| `hauling-pr` | ubuntu-24.04 | only when the hauling step failed: the alias PR or the issue *Hauling job failed* |
 | `publish-merged` | ubuntu-24.04 | on the merge of a data PR (push of `state/pending.json`): publishes exactly the draft the PR named |
 | `heartbeat` | ubuntu-24.04 | `state/last-run.json`, committed in every run |
 
-A release has four kinds of assets: `manifest.json` (the contract with the app, [`docs/manifest-format.md`](docs/manifest-format.md)),
-`NOTICE.md`, `ships.zip` (ship files and outlines) and one `<slug>.holo` per ship. Artifacts of a run carry reports
-only, never game data.
+A release has these assets: `manifest.json` (the contract with the app, [`docs/manifest-format.md`](docs/manifest-format.md)),
+`NOTICE.md`, `ships.zip` (ship files and outlines), one `<slug>.holo` per ship, and `hauling-templates.json` with
+`positions.json` (format: `docs/hauling-data-format.md` of the app). Artifacts of a run carry reports only, never game
+data.
 
 One entry point, `tools/run.py`, with the stages handing on through `work/`:
 
 | Stage | Does |
 |---|---|
 | `fetch` | the catalog (one API call, or saved answers); model URLs from the cargo page; models cached by hash |
+| `hauling` | the commit of scunpacked-data and its tarball (streamed, not cached): templates, positions, alias table, the app's loader checks, diff; a failure writes `failed` and exit 0 |
 | `diff` | the import writes the racks; ship files compared without their stamps: new, changed, gone, models separately |
 | `build` | holograms of changed and new models (or `--all` / `--ship`): flatten, cull, ladder 20k/30k/40k, export, outline; then outlines and anchors |
 | `verify` | the rules (gone ships, variants, overlap, missing transform, judge), the manifest, every file against it |
 | `release` | `--dry-run`: the staged release and its assets; `--seed`: the first release from the app and a hologram release |
 
-Around them for the workflow: `pins`, `previous`, `draft`, `gate`, `publish`, `pr`, `heartbeat`
+Around them for the workflow: `pins`, `previous`, `draft`, `gate`, `publish`, `pr`, `hauling-pr`, `heartbeat`
 (`python -I tools/run.py --help`). Exit codes: 0 done, 1 error, 2 a rule fired (PR path). Every stage ends with three
 lines, *checked / found / to do*, on the screen and in the job summary.
 
