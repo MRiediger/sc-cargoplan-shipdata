@@ -140,3 +140,34 @@ def test_publish_and_pr_need_a_green_gate() -> None:
     for job in ('publish', 'pr'):
         cond = next(l for l in jobs()[job] if l.strip().startswith('if:'))
         assert "needs.gate.result == 'success'" in cond, cond
+
+
+def step_named(job: str, prefix: str) -> list[str]:
+    return next(s for s in steps(jobs()[job]) if any(l.strip().startswith(f'- name: {prefix}') or
+                                                     l.strip().startswith(f'name: {prefix}') for l in s))
+
+
+def test_the_hauling_step_never_stops_the_chain() -> None:
+    """K2 (H1): a failed or crashed hauling step colours itself only - the ship data go on; it runs after previous
+    (the last release's files) and before diff (a hauling change alone releases, SD14)."""
+    names = [next((l.split('name:', 1)[1].strip() for l in s if 'name:' in l), s[0].strip()) for s in steps(jobs()['chain'])]
+    at = next(i for i, n in enumerate(names) if n.startswith('Hauling'))
+    assert names[at - 1] == 'Last release' and names[at + 1] == 'Diff'
+    hauling = step_named('chain', 'Hauling')
+    assert '        continue-on-error: true' in hauling and '        id: hauling' in hauling
+    assert any(l.strip() == 'run: python -I tools/run.py hauling' for l in hauling)
+    outputs = '\n'.join(jobs()['chain'])
+    assert 'hauling: ${{ steps.hauling.outputs.status }}' in outputs
+    assert 'haulingStep: ${{ steps.hauling.outcome }}' in outputs
+
+
+def test_hauling_pr_reports_every_failure_and_the_heartbeat_waits_for_it() -> None:
+    """E1: a failed status or a crashed step opens the alias PR or the issue - never silent."""
+    body = jobs()['hauling-pr']
+    cond = next(l for l in body if l.strip().startswith('if:'))
+    assert "needs.chain.outputs.hauling == 'failed'" in cond and "needs.chain.outputs.haulingStep == 'failure'" in cond
+    assert cond.strip().startswith('if: always() &&')
+    perms = body[body.index('    permissions:') + 1:body.index('    permissions:') + 4]
+    assert sorted(l.strip() for l in perms) == ['contents: write', 'issues: write', 'pull-requests: write']
+    needs = next(l for l in jobs()['heartbeat'] if l.strip().startswith('needs:'))
+    assert 'hauling-pr' in needs

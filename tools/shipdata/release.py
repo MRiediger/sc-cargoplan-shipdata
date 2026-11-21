@@ -126,8 +126,8 @@ ZIP_TIME = (1980, 1, 1, 0, 0, 0)    # the earliest time a ZIP entry can carry: t
 
 def pack(stage: Path, release_dir: Path, notice: Path) -> list[Asset]:
     """The release assets from a stage checked against its manifest: ships.zip with exactly the files of `files` (sorted,
-    fixed time and mode, deflated; Python docs, zipfile.ZipInfo and ZipFile.writestr), the holograms and the manifest byte
-    for byte, NOTICE.md from the repo. Nothing else lands in the folder."""
+    fixed time and mode, deflated; Python docs, zipfile.ZipInfo and ZipFile.writestr), the holograms, the two hauling
+    files (section hauling, H1) and the manifest byte for byte, NOTICE.md from the repo. Nothing else lands in the folder."""
     m = manifest.read(stage / 'manifest.json')
     problems = manifest.check(stage, m)
     if problems:
@@ -143,6 +143,8 @@ def pack(stage: Path, release_dir: Path, notice: Path) -> list[Asset]:
             z.writestr(info, (stage / rel).read_bytes())
     for e in ((m['holo'] or {}).get('ships') or {}).values():
         shutil.copyfile(stage / e['file'], release_dir / e['file'])
+    for key in manifest.HAULING_FILES if m.get('hauling') else ():
+        shutil.copyfile(stage / m['hauling'][key]['file'], release_dir / m['hauling'][key]['file'])
     shutil.copyfile(notice, release_dir / 'NOTICE.md')
     shutil.copyfile(stage / 'manifest.json', release_dir / 'manifest.json')
     return assets(release_dir)

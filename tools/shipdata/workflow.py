@@ -17,6 +17,7 @@ VERSION = re.compile(r'^ships-(?P<year>\d{4})\.(?P<month>\d{2})(?:\.(?P<n>\d+))?
 KEEP = 2                    # published data releases that stay (SD4)
 CONTACT_SHEET = re.compile(r'^contact-sheet-\d+\.png$')     # the gate's pictures on a draft, removed before publishing
 CLASS_NAME = re.compile(r'^[A-Za-z0-9_]+$')
+ALIAS_BRANCH = 'data/hauling-aliases'      # hauling-pr's PR (H1, E1): extends the alias table, publishes nothing
 
 
 class WorkflowError(RuntimeError):
@@ -68,6 +69,8 @@ def expected_assets(m: dict) -> dict[str, tuple[int | None, str | None]]:
                                                      m['assets']['ships']: (None, None)}
     for e in ((m.get('holo') or {}).get('ships') or {}).values():
         out[e['file']] = (e['bytes'], e['sha256'])
+    for key in manifest.HAULING_FILES if m.get('hauling') else ():
+        out[m['hauling'][key]['file']] = (m['hauling'][key]['bytes'], m['hauling'][key]['sha256'])
     return out
 
 
@@ -177,9 +180,11 @@ def draft_stage(p, log: Reporter, folder: Path | None, target: str) -> int:
         github.gh('release', 'delete', t, '--yes')
     motherlode = (m.get('builtFrom') or {}).get('motherlode') or {}
     notes = p.out / 'release-notes.md'
+    hauling = p.w('hauling-notes.md').read_text(encoding='utf-8') if p.w('hauling-notes.md').exists() else ''
     notes.write_text(f"Ship data {tag} for SC-CargoPlan, built from Motherlode {motherlode.get('gameBuild', '?')} "
-                     f"({motherlode.get('updatedAt', '?')}).\n\nShip data and holograms are CIG material under "
-                     'NOTICE.md, not MIT. The app reads manifest.json.\n', encoding='utf-8', newline='\n')
+                     f"({motherlode.get('updatedAt', '?')}).\n\n" + (hauling + '\n' if hauling else '')
+                     + 'Ship data, holograms and hauling data are CIG material under NOTICE.md, not MIT. The app reads '
+                     'manifest.json.\n', encoding='utf-8', newline='\n')
     github.gh('release', 'create', tag, '--draft', '--target', target, '--title', tag, '--notes-file', str(notes))
     first = sorted(str(q) for q in folder.iterdir() if q.is_file() and q.name != 'manifest.json')
     github.gh('release', 'upload', tag, *first, '--clobber')
@@ -255,7 +260,7 @@ def publish_stage(p, log: Reporter, tag: str | None, pending: Path | None, targe
 
 # ---------------------------------------------------------------- the outcome of a run (SD11) and its one line
 
-JOBS = ('chain', 'gate', 'publish', 'pr', 'publish-merged', 'heartbeat', 'local')
+JOBS = ('chain', 'gate', 'publish', 'pr', 'hauling-pr', 'publish-merged', 'heartbeat', 'local')
 SD5 = {1: 'passed turns false', 2: 'above 110 % of its budget', 3: 'Hausdorff worse by more than the tolerance',
        4: 'no comparable hologram (new ship or new source)', 5: 'fails another metric'}
 GRID_RULES = ('order', 'overlap', 'handcheck', 'no-transform')
@@ -269,9 +274,12 @@ def plural(n: int, word: str) -> str:
 def counts(d: dict, v: dict) -> dict:
     """The numbers of a run's one line, from diff.json and verify.json: holos refreshed = rebuilt and not byte-equal."""
     holo = v.get('holo') or {}
-    return {'changed': len(d['ships']['changed']), 'new': len(d['ships']['new']), 'gone': len(d['ships']['gone']),
-            'holosRefreshed': holo.get('built', 0) - holo.get('byteEqualToPrevious', 0),
-            'findings': sum(1 for f in v['findings'] if f['stop'])}
+    c = {'changed': len(d['ships']['changed']), 'new': len(d['ships']['new']), 'gone': len(d['ships']['gone']),
+         'holosRefreshed': holo.get('built', 0) - holo.get('byteEqualToPrevious', 0),
+         'findings': sum(1 for f in v['findings'] if f['stop'])}
+    if v.get('hauling'):
+        c['hauling'] = v['hauling']['state']
+    return c
 
 
 def summary_line(result: str, *, tag: str | None = None, counts: dict | None = None, pr: object = None,
@@ -280,7 +288,8 @@ def summary_line(result: str, *, tag: str | None = None, counts: dict | None = N
     c = counts or {}
     if result == 'release':
         return (f"Release {tag}: {plural(c.get('changed', 0), 'ship')} changed, {c.get('new', 0)} new"
-                + (f", {c['gone']} gone" if c.get('gone') else '') + f", {plural(c.get('holosRefreshed', 0), 'holo')} refreshed")
+                + (f", {c['gone']} gone" if c.get('gone') else '') + f", {plural(c.get('holosRefreshed', 0), 'holo')} refreshed"
+                + (f", hauling {c['hauling']}" if c.get('hauling') else ''))
     if result == 'pr':
         return f"PR #{pr}: {plural(c.get('findings', 0), 'finding')}"
     if result == 'nothing':
@@ -450,7 +459,7 @@ def close_superseded(by: str, keep: str | None) -> list[int]:
     """Open data PRs other than `keep`: their draft was replaced, merging them could only fail. Closed with a comment."""
     closed = []
     for x in github.gh_json('pr', 'list', '--state', 'open', '--json', 'number,headRefName') or []:
-        if x['headRefName'].startswith('data/') and x['headRefName'] != keep:
+        if x['headRefName'].startswith('data/') and x['headRefName'] not in (keep, ALIAS_BRANCH):
             github.gh('pr', 'close', str(x['number']), '--comment', f'Superseded by {by}: the draft release of this PR was replaced.')
             closed.append(x['number'])
     return closed

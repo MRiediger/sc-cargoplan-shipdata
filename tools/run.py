@@ -13,6 +13,8 @@
   python -I tools/run.py gate --app <sc-cargoplan checkout> (--old-tag T | --old DIR) (--new-tag T | --new DIR)
                                                                     render gate on Windows; contact sheets to --new-tag
   python -I tools/run.py pr --tag T [--dry-run]                     PR data/YYYY.MM with state/pending.json (merge = release)
+  python -I tools/run.py hauling [--saved DIR] [--previous DIR]     hauling templates + positions (H1); never stops the ship data
+  python -I tools/run.py hauling-pr [--dry-run]                     a failed hauling job: alias PR (gap) or issue (E1)
   python -I tools/run.py heartbeat                                  state/last-run.json + commit (NEEDS = toJSON(needs))
 
 Stages hand on through <root>/work (see shipdata/stages.py). Exit codes: 0 done, 1 error, 2 a rule fired (PR path).
@@ -30,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from shipdata import gate, stages, workflow  # noqa: E402
+from shipdata.hauling import stage as hauling  # noqa: E402
 from shipdata.log import Reporter  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +109,11 @@ def main(argv: list[str]) -> int:
     pr = sub.add_parser('pr')
     pr.add_argument('--tag', required=True, help='the draft release the PR names')
     pr.add_argument('--dry-run', action='store_true', help='write out/pr-body.md only: no git, no gh')
+    ha = sub.add_parser('hauling')
+    ha.add_argument('--saved', type=Path, help='commit.json + scunpacked.tar.gz instead of gh api and the tarball GET')
+    ha.add_argument('--previous', type=Path, help='folder of the last release (default work/previous-release, run.py previous)')
+    hp = sub.add_parser('hauling-pr')
+    hp.add_argument('--dry-run', action='store_true', help='write out/hauling-pr-body.md or out/hauling-issue.md only')
     hb = sub.add_parser('heartbeat')
     hb.add_argument('--today', default=dt.date.today().isoformat())
     a = ap.parse_args(argv)
@@ -126,6 +134,10 @@ def main(argv: list[str]) -> int:
                                    new_dir=a.new, upload_tag=a.new_tag)
         if a.cmd == 'pr':
             return workflow.pr_stage(p, log, a.tag, run_id(), run_url(), a.dry_run)
+        if a.cmd == 'hauling':
+            return hauling.hauling_stage(p, log, a.saved, previous=a.previous)
+        if a.cmd == 'hauling-pr':
+            return hauling.hauling_pr_stage(p, log, run_url(), a.dry_run)
         if a.cmd == 'heartbeat':
             return workflow.heartbeat_stage(p, log, json.loads(os.environ.get('NEEDS') or '{}'),
                                             os.environ.get('GITHUB_EVENT_NAME', 'local'), run_id(), run_url(), a.today)
