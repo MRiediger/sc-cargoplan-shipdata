@@ -42,8 +42,13 @@ class Resolution:
 
 
 class Starmap:
+    """The entries of the three systems with an identity of their own: an entry whose uuid other entries share (4.10.3:
+    12 uuids for 617 asteroids, points of interest and 'unknown' entries) is neither resolved nor written."""
     def __init__(self, doc: dict) -> None:
-        self.entities = [e for e in doc['entities'] if e.get('system') in SYSTEMS]
+        mine = [e for e in doc['entities'] if e.get('system') in SYSTEMS]
+        count = Counter(e['uuid'] for e in mine)
+        self.entities = [e for e in mine if count[e['uuid']] == 1]
+        self.shared = sum(1 for n in count.values() if n > 1)
         self.by_uuid = {e['uuid']: e for e in self.entities}
 
     def named(self, name: str, system: str | None) -> list[dict]:

@@ -121,3 +121,14 @@ def test_a_proposal_keeps_the_table_and_adds_each_gap() -> None:
     assert out['Checkmate at the L4'] == {'uuid': 'id-Checkmate', 'starmap': 'Checkmate'}
     assert out['Rayari']['drop'].startswith('no unique starmap entry')
     assert list(out) == sorted(out)
+
+
+def test_entries_that_share_a_uuid_are_neither_resolved_nor_written() -> None:
+    """The 4.10.3 starmap gives 12 uuids to 617 entries (asteroids, points of interest, 'unknown'): such an entry has no
+    identity of its own, and one position per uuid (K1) would pull in all of them."""
+    sm = ps.Starmap(starmap(entity('Rock A', type_='Outpost', uuid='same'), entity('Rock B', type_='Manmade', uuid='same'),
+                            EVERUS))
+    r = ps.resolve([tpl(pickup=['Rock A', 'Everus Harbor'])], sm, {})
+    assert [(g.name, g.why) for g in r.gaps] == [('Rock A', 'no starmap entry of that name')]
+    got, _ = ps.build(sm, {'same', 'id-Everus Harbor'}, {})
+    assert [x['name'] for x in got] == ['Everus Harbor'] and sm.shared == 1
