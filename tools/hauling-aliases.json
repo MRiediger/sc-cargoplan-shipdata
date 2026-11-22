@@ -21,11 +21,6 @@
   "Caterpillar wreck site": {
    "drop": "a generic wreck site: no single position"
   },
-  "Checkmate at the L4 Lagrange of Pyro II": {
-   "uuid": "07463f54-4ecd-4323-8a28-fb65b8a4ebca",
-   "starmap": "Checkmate",
-   "note": "Pyro long form: the station"
-  },
   "Clio Derelict Outpost": {
    "uuid": "2a21d86f-ebf0-4052-a134-c414c9998592",
    "starmap": "Clio",
