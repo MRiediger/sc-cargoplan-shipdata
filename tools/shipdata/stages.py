@@ -430,8 +430,12 @@ def release_stage(p: Paths, log: Reporter, dry_run: bool) -> int:
     log.num('release.assets', len(assets))
     log.num('release.holo', len(holos))
     log.num('release.bytes', total)
+    # A16: the hauling files are assets of their own (section hauling, H1), so the summary names them or says none.
+    hauling = (', '.join(m['hauling'][k]['file'] for k in manifest.HAULING_FILES) if m.get('hauling')
+               else 'no hauling files (hauling: null)')
     log.say('release --dry-run', f"stage of {m['dataVersion']} against its manifest, packed to {p.out / 'release'} with NOTICE.md",
-            f"{len(assets)} assets, {total} bytes: manifest.json, NOTICE.md, {m['assets']['ships']}, {len(holos)} x .holo; "
+            f"{len(assets)} assets, {total} bytes: manifest.json, NOTICE.md, {m['assets']['ships']}, {hauling}, "
+            f"{len(holos)} x .holo; "
             'nothing uploaded, the model cache untouched',
             'none (publishing: run.py draft, then publish after a green gate)')
     return 0

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from conftest import contract, entity, order, starmap, write_json
-from shipdata import manifest, release, workflow
+from shipdata import manifest, release, stages, workflow
 from shipdata.hauling import check, source, stage
 from shipdata.log import Reporter
 from test_heartbeat_pr import FakeGit, git  # noqa: F401  (fixture)
@@ -19,8 +19,10 @@ from test_workflow_stages import FakeGitHub, gh, paths, release_folder  # noqa: 
 COMMIT = {'sha': 'f182b7f111279c9193df81927c9b4dbc8c4f3291',
           'commit': {'message': '4.10.3-LIVE.13165946\n\nupdate', 'committer': {'date': '2026-11-13T09:58:13Z'}}}
 CONTRACTS = [contract('u1', pickup=['HUR-L1 Green Glade Station'], dropoff=['Everus Harbor']),
-             contract('u2', debug='RedWind_Pyro_BulkGrade_Solar_HH_StationToStation_Waste_CargoHauling_AtoB',
+             # planetary: a drop may empty its pool; a stellar pool emptied by drops fails the job (test below)
+             contract('u2', debug='RedWind_Pyro_BulkGrade_Planetary_HH_StationToStation_Waste_CargoHauling_AtoB',
                       title='Senior Hauler Needed for Large Shipment', giver='Red Wind Linehaul', reward=None,
+                      mission='Hauling - Planetary',
                       orders=[order('Waste', 400, 600, 32)], pickup=['Checkmate at the L4 Lagrange of Pyro II'],
                       dropoff=['Lobby']),
              contract('u3', released=False),
@@ -124,6 +126,25 @@ def test_a_gap_fails_the_job_writes_the_proposal_and_no_files(tmp_path: Path) ->
     assert not (p.w('hauling') / check.TEMPLATES_FILE).exists()
 
 
+def test_drops_that_empty_a_stellar_pool_fail_the_job_as_a_gap(tmp_path: Path) -> None:
+    """H1 addendum (22 Nov): a stellar pool that only drops would empty is a gap - the board would lose an edge without
+    anyone deciding it. A stellar pool that keeps a place, and a planetary pool (u2), stay as they are."""
+    contracts = [contract('s1', pickup=['Everus Harbor'], dropoff=['Lobby']),                     # emptied: gap
+                 contract('s2', pickup=['Everus Harbor'], dropoff=['Lobby', 'HUR-L1 Green Glade Station']),   # keeps one
+                 *CONTRACTS[1:]]
+    p, log = setup(tmp_path)
+    assert stage.hauling_stage(p, log, saved(tmp_path, contracts=contracts)) == 0
+    s = status(p)
+    assert (s['status'], s['kind'], s['changed']) == ('failed', 'gap', False)
+    assert [(g['name'], g['system'], g['templates']) for g in s['gaps']] == [('Lobby', 'stanton', ['s1'])]
+    assert 'stellar' in s['gaps'][0]['why'] and 'drop' in s['reason']
+    proposed = json.loads(p.w('hauling-aliases-proposed.json').read_text(encoding='utf-8'))
+    assert 'Lobby' in proposed['aliases'] and 'Checkmate at the L4 Lagrange of Pyro II' in proposed['aliases']
+    assert not (p.w('hauling') / check.TEMPLATES_FILE).exists()
+    stage.hauling_pr_stage(p, log, '-', dry_run=True)
+    assert 'Lobby' in (p.out / 'hauling-pr-body.md').read_text(encoding='utf-8')
+
+
 def test_a_source_error_fails_the_job_with_exit_0(tmp_path: Path) -> None:
     p, log = setup(tmp_path)
     assert stage.hauling_stage(p, log, tmp_path / 'nothing-here') == 0
@@ -224,6 +245,32 @@ def test_the_manifest_section_the_zip_and_the_assets(tmp_path: Path) -> None:
     assert set(workflow.expected_assets(m)) == assets
     (s / check.POSITIONS_FILE).write_text('{}', encoding='utf-8')
     assert manifest.check(s, m) == ['positions.json: length or SHA-256 differs from the manifest']
+
+
+def test_the_release_dry_run_names_the_hauling_files_in_its_found_line(tmp_path: Path) -> None:
+    """A16: what the dry run packs, its summary says - the two hauling files included, or that there are none."""
+    p, log = setup(tmp_path)
+    stage.hauling_stage(p, log, saved(tmp_path))
+    s = p.w('stage')
+    (s / 'ships').mkdir(parents=True)
+    (s / 'ships' / 'a.json').write_text('{"schemaVersion": 6, "racks": []}', encoding='utf-8')
+    (s / 'outlines.json').write_text('{}', encoding='utf-8')
+    for name in check.FILES:
+        shutil.copyfile(p.w('hauling') / name, s / name)
+    m = manifest.build(s, data_version='ships-2026.11.2', generated_at='t', motherlode={}, app_tag='v0.5.1',
+                       pipeline_commit='x', tools={}, holo_ships=None, ships={}, hauling=check.section(s))
+    manifest.write(s / 'manifest.json', m)
+
+    def found() -> str:
+        return [x for x in workflow.said(p.out) if x['step'] == 'release --dry-run'][-1]['found']
+
+    assert stages.release_stage(p, log, dry_run=True) == 0
+    assert f'{check.TEMPLATES_FILE}, {check.POSITIONS_FILE}' in found()
+    for name in check.FILES:
+        (s / name).unlink()
+    manifest.write(s / 'manifest.json', dict(m, hauling=None))
+    assert stages.release_stage(p, log, dry_run=True) == 0
+    assert 'no hauling files' in found()
 
 
 def test_a_manifest_without_hauling_still_reads_and_null_is_written_as_null(tmp_path: Path) -> None:

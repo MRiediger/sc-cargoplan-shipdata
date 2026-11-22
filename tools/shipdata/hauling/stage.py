@@ -2,8 +2,9 @@
 
   hauling     source -> templates -> positions -> check -> diff, five summaries (hauling-fetch ... hauling-diff); writes
               work/hauling/ (the two files), work/hauling.json (status), work/hauling-changelog.md, and on a gap
-              work/hauling-aliases-proposed.json. A source error, an unknown title word, a gap or a failed check ends
-              with status `failed` and exit 0: the ship data go on (K2). A bug ends red - the workflow step has
+              work/hauling-aliases-proposed.json. A gap is a pool name without a position, or a drop that empties the
+              pool of a stellar template (emptied_by_drops). A source error, an unknown title word, a gap or a failed
+              check ends with status `failed` and exit 0: the ship data go on (K2). A bug ends red - the workflow step has
               continue-on-error, and verify then carries the last files as for any failure.
   verify      release_files(): this run's files when the status is ok, else the last release's files unchanged when
               they match their manifest, else none (hauling: null)
@@ -60,6 +61,24 @@ def previous_hauling(folder: Path) -> tuple[str, dict | None, dict | None, list[
     return (m['dataVersion'], None, None, problems) if problems else (m['dataVersion'], t, pos, [])
 
 
+def emptied_by_drops(kept: list[dict], resolved: list[dict], starmap: ps.Starmap, aliases: dict[str, dict]) -> list[ps.Gap]:
+    """Stellar pools that held names before resolution and only drops emptied (H1 addendum, 22 Nov): each such name is a
+    gap, so the alias PR asks for a decision instead of the board losing an edge in silence. Planetary and local pools may
+    empty (their rooms and caves have no position); a stellar pool that keeps one place stays. resolved: resolve()'s
+    templates, in the order of kept."""
+    gaps: dict[tuple[str, str | None], ps.Gap] = {}
+    for raw, new in zip(kept, resolved, strict=True):
+        if raw['missionType'] != 'stellar':
+            continue
+        for key in ('pickupPool', 'dropoffPool'):
+            if raw[key] and not new[key] and all('drop' in aliases.get(n, {}) for n in raw[key]):
+                for n in raw[key]:
+                    g = gaps.setdefault((n, raw['system']), ps.Gap(
+                        n, raw['system'], f"its drop empties the {key} of a stellar template", [], starmap.like(n, raw['system'])))
+                    g.templates.append(raw['uuid'])
+    return sorted(gaps.values(), key=lambda g: (g.name, g.system or ''))
+
+
 def hauling_stage(p, log: Reporter, saved: Path | None, fetched_at: str | None = None, previous: Path | None = None) -> int:
     fetched_at = fetched_at or utc_now()
     version = load(p.w('previous.json'))['nextVersion']
@@ -97,13 +116,16 @@ def hauling_stage(p, log: Reporter, saved: Path | None, fetched_at: str | None =
                 + (', '.join(f'{k} {v}' for k, v in excluded.most_common()) or 'none'), 'none')
 
         aliases_doc = load(p.root / ALIASES)
-        res = ps.resolve(kept, ps.Starmap(src.starmap), aliases_doc['aliases'])
+        sm = ps.Starmap(src.starmap)
+        res = ps.resolve(kept, sm, aliases_doc['aliases'])
         doc['dropped'] = sum(res.dropped.values())
-        doc['gaps'] = [asdict(g) for g in res.gaps]
-        if res.gaps:
-            write(p.w(PROPOSED), dict(aliases_doc, aliases=ps.propose(aliases_doc['aliases'], res.gaps)))
-            raise Stop('gap', f"{len(res.gaps)} pool names without a position: {', '.join(g.name for g in res.gaps[:8])}"
-                              + ('...' if len(res.gaps) > 8 else ''))
+        emptied = emptied_by_drops(kept, res.templates, sm, aliases_doc['aliases'])
+        gaps = res.gaps + emptied
+        doc['gaps'] = [asdict(g) for g in gaps]
+        if gaps:
+            write(p.w(PROPOSED), dict(aliases_doc, aliases=ps.propose(aliases_doc['aliases'], gaps)))
+            raise Stop('gap', f"{len(res.gaps)} pool names without a position, {len(emptied)} drops that empty a stellar "
+                              f"pool: {', '.join(g.name for g in gaps[:8])}" + ('...' if len(gaps) > 8 else ''))
         pos, hints = ps.build(ps.Starmap(src.starmap), res.used, aliases_doc['aliases'])
         doc['hints'] = res.hints + hints
         per = Counter(x['system'] for x in pos)
@@ -196,7 +218,8 @@ def gap_body(h: dict, run_url: str) -> str:
         rows.append(f"| `{g['name']}` | {g['system'] or 'any'} | {g['why']} | {len(g['templates'])} | {cands} |")
     return '\n'.join([
         f"## Hauling aliases: {len(h['gaps'])} place names without a position", '',
-        f"The hauling job of run {run_url} stopped: these pool names match no starmap entry. The ship data were released "
+        f"The hauling job of run {run_url} stopped: these pool names match no starmap entry, or their `drop` empties the "
+        'pool of a stellar template (column Why). The ship data were released '
         'without it (K2); the last hauling files are carried.', '',
         f'This PR adds one entry per name to `{ALIASES}`: a unique candidate by `uuid`, otherwise a `drop` with the '
         'candidates named. **Merge = the table is extended**; the hauling data follow with the next run (dispatch or the '
