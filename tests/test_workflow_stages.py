@@ -75,6 +75,7 @@ class FakeGitHub:
     def __init__(self) -> None:
         self.releases: dict[str, dict] = {}
         self.prs: list[dict] = []
+        self.issues: list[dict] = []
         self.calls: list[tuple[str, ...]] = []
 
     def add(self, tag: str, folder: Path, draft: bool = False) -> None:
@@ -98,10 +99,28 @@ class FakeGitHub:
             x['state'] = 'closed'
         return ''
 
+    def issue(self, args: tuple[str, ...]) -> str:
+        """gh issue list --state open --search ... --json number,title | create --title --body-file | comment N --body-file"""
+        sub = args[1]
+        opt = lambda k: args[args.index(k) + 1] if k in args else None
+        if sub == 'list':
+            return json.dumps([{'number': x['number'], 'title': x['title']} for x in self.issues if x['state'] == 'open'])
+        if sub == 'create':
+            n = 100 + len(self.issues)
+            self.issues.append({'number': n, 'title': opt('--title'), 'state': 'open', 'comments': [],
+                                'body': Path(opt('--body-file')).read_text(encoding='utf-8')})
+            return f'https://github.com/o/r/issues/{n}\n'
+        x = next(x for x in self.issues if x['number'] == int(args[2]))
+        if sub == 'comment':
+            x['comments'].append(Path(opt('--body-file')).read_text(encoding='utf-8'))
+        return ''
+
     def __call__(self, *args: str) -> str:
         self.calls.append(args)
         if args[0] == 'pr':
             return self.pr(args)
+        if args[0] == 'issue':
+            return self.issue(args)
         sub = args[1]
         tag = args[2] if len(args) > 2 and not args[2].startswith('-') else None
         if sub == 'list':

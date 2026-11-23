@@ -1,6 +1,6 @@
 # manifest.json of a data release
 
-**Status: ratified with SD2 (T12.0, 18 Nov 2026), addendum T12.1b (`fails`).** Written by `run.py verify` (and
+**Status: ratified with SD2 (T12.0, 18 Nov 2026), addendum T12.1b (`fails`), addendum H1 (section `hauling`, SD14).** Written by `run.py verify` (and
 `release --seed`) with `tools/shipdata/manifest.py`, and read back there with its required fields checked; `release.pack`
 writes the assets below, `release.unpack` reads `manifest.json` and `ships.zip` for `diff --previous`. Drafted in T12.1;
 `orderKeys`, `assets` and the flat hologram paths came with T12.0, their writer and reader with T12.1b.
@@ -13,6 +13,8 @@ A data release `ships-YYYY.MM[.N]` has these assets, all flat (SD4; GitHub asset
 | `NOTICE.md` | licence of the data and holograms (CIG material, not MIT) |
 | `ships.zip` | `ships/**` and `outlines.json` – the one archive the app downloads. Entries sorted, fixed time and mode: the same content gives the same bytes with the same pins (zlib) |
 | `<slug>.holo` | one hologram per slug, loaded lazily per ship, as from holo-v3 |
+| `hauling-templates.json` | hauling templates of Covalex and Red Wind (H1, section [`hauling`](#section-hauling-h1-sd14)) |
+| `positions.json` | positions of the places the templates name, and of the stations, planets and stars (H1) |
 
 ```json
 {
@@ -35,6 +37,11 @@ A data release `ships-YYYY.MM[.N]` has these assets, all flat (SD4; GitHub asset
                  "rawSha256": "da8168ea3720…", "budget": 20000, "triangles": 6699, "edges": [..],
                  "passed": true, "fails": [], "metrics": {"errorM": 0.0, "topIou": 1.0, "…": "…"}}
   }
+ },
+ "hauling": {
+  "schemaVersion": 1,
+  "templates": {"file": "hauling-templates.json", "bytes": 570973, "sha256": "<sha256>"},
+  "positions": {"file": "positions.json", "bytes": 42563, "sha256": "<sha256>"}
  },
  "ships": {
   "100i": {"source": "cryon.rocks (Motherlode) 4.10.3-LIVE.13165946, 2026-11-16T11:36:30.299Z",
@@ -60,6 +67,7 @@ A data release `ships-YYYY.MM[.N]` has these assets, all flat (SD4; GitHub asset
 | `holo.ships.<slug>.model`, `rawSha256` | The className and the SHA-256 of the model the hologram was built from. Holograms kept from holo-v1 say `fleetyards (holo-v1)`. | `diff` compares it with the hash in the catalog's model URL. That is how a re-export is noticed. |
 | `holo.ships.<slug>.budget … metrics` | The judge's numbers, as in the holo-v3 manifest. | The judge compares with the last release: only a change for the worse in a metric stops (SD5, replaces P9). |
 | `holo.ships.<slug>.fails` | The metrics the hologram fails (`holo_mesh.judge`: `triangles`, `iou`, `hausdorff`, `error`, `holes`, `winding`, `slivers`, `fscore`), `[]` when it passes. Required. `verify` writes it from the build; `--seed` derives it from the holo release's metrics (holo-v3 has none; `error` needs the length and counts as not failed; 97 / 97 equal to T12.1's build). | SD5 case 5: one more failed metric stops. Addendum F1 (T12.1b). |
+| `hauling` | Optional; `null` or missing: no hauling data. `schemaVersion` of both files, then `file`, `bytes`, `sha256` of each. Not in `files`, not in `ships.zip`. Details below. | App-D119, SD14; addendum H1 to SD2. |
 | `ships.<id>.source` | Copy of the ship file's stamp. It is never compared (condition C). | |
 | `ships.<id>.modelKey` | Hologram and outline of the ship. | The import's key map (P6). |
 | `ships.<id>.racksSha256` | SHA-256 of the racks alone. | Rule "variant": a gone variant whose racks were equal to its base ship's takes the base's data (SD6). |
@@ -74,3 +82,39 @@ Not in the manifest, on purpose:
 - the previous catalog, or anything copied from it beyond derived values (A17, SD7);
 - holo `baseUrl`: dropped for good (SD2). Every release holds all its holograms, so the download URL follows from
   `dataVersion`; the app (T12.4) builds it that way.
+
+## Section `hauling` (H1, SD14)
+
+The text below is the app's contract, `sc-cargoplan/docs/hauling-data-format.md`, section "Manifest section `hauling`",
+word for word (21 Nov 2026, T13.0). The contents of the two files (schema 1) are defined there only; this pipeline
+writes them with `tools/shipdata/hauling/` and checks them with the app's loader checks (`hauling/check.py`).
+
+```json
+"hauling": {
+ "schemaVersion": 1,
+ "templates": {"file": "hauling-templates.json", "bytes": 1482113, "sha256": "<sha256>"},
+ "positions": {"file": "positions.json", "bytes": 41877, "sha256": "<sha256>"}
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `hauling` | Optional. Missing or `null`: this release has no hauling data. |
+| `hauling.schemaVersion` | The schema of **both** files, today `1`; equal to the `schemaVersion` inside each file. |
+| `hauling.templates`, `hauling.positions` | Asset name (flat), length and SHA-256 of each file, as for holograms (`holo.ships.<slug>`). The URL is `…/releases/download/<dataVersion>/<file>`. |
+
+**The hauling data never cost the ship data** (K2 of the T13.0 approval):
+
+| Case | App |
+|---|---|
+| `hauling` missing or `null` | Routes tab without templates (pool, matrix and ranking from scans only); ships load; **no notice**. |
+| `hauling.schemaVersion` unknown, or a file fails its length, hash or a [loader check](#checks-of-the-loader) | Like a hologram format the app doesn't read (`HoloOffer.UnknownFormat`, D114): one log line, a hint in the Routes tab; ships load. |
+| Both files read | Templates and positions for the run; a data change counts from the next start (D111 addendum). |
+
+**Rule for the pipeline (SD14):** a hauling job that fails (API down, a place without a position, a gap in the alias
+table) writes `hauling: null` or carries the previous release's two files forward unchanged; it **never** stops the ship
+data release. "Stop" below means the hauling job stops, not the run.
+
+**This pipeline (SD14):** it carries the previous release's two files forward unchanged when they match their manifest
+and pass the checks, and writes `null` otherwise; `hauling-pr` reports every failure (a PR for an alias gap, the issue
+"Hauling job failed" for anything else). A hauling change alone makes a release.

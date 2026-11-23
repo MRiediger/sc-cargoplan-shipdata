@@ -17,9 +17,18 @@ A few ships still use data derived from fleetyards.net (Fleetyards agreed to thi
 the ships whose `source` names Fleetyards, and the outline entries without `floorM`. A ship that left Motherlode's
 catalog keeps its last data; `manifest.json` names it with `missingSince`.
 
-Thanks to Motherlode and Fleetyards. Not affiliated with Motherlode, Fleetyards or CIG.
+**Hauling data** (`hauling-templates.json`, `positions.json`): the hauling contract templates of Covalex and Red Wind
+Linehaul and the positions of stations, planets and the places the templates name, from the Star Citizen game files
+(CIG material), extracted with [octfx/ScDataDumper](https://github.com/octfx/ScDataDumper) and published by the Star
+Citizen Wiki as [StarCitizenWiki/scunpacked-data](https://github.com/StarCitizenWiki/scunpacked-data) - the same
+extraction [api.star-citizen.wiki](https://api.star-citizen.wiki) serves. Normalized for SC-CargoPlan: some place names
+mapped to the starmap's names, placeholder texts left out, templates without a fixed SCU band left out; nothing is
+estimated.
+
+Thanks to Motherlode, Fleetyards, the Star Citizen Wiki and octfx. Not affiliated with Motherlode, Fleetyards, the Star
+Citizen Wiki or CIG.
 
 Star Citizen ships are the intellectual property of Cloud Imperium Rights LLC / Cloud Imperium Rights Ltd. These data
 are **not** covered by the MIT license of this repository's code (`LICENSE`). They will be withdrawn on request of CIG,
-Motherlode or Fleetyards: the release's files are deleted, and the next release sets `holo` to `null` in its manifest,
-so the app shows the flat outline instead.
+Motherlode, Fleetyards or the Star Citizen Wiki: the release's files are deleted, and the next release sets `holo` (or
+`hauling`) to `null` in its manifest, so the app shows the flat outline instead (or plans routes from scans only).

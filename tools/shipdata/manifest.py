@@ -11,6 +11,9 @@ SCHEMA_VERSION = 6              # ship JSON, ShipLoader.SupportedSchemaVersion o
 HOLO_FORMAT_VERSION = 2         # SCH2, docs/holo-format.md of the app
 REQUIRED = ('dataVersion', 'schemaVersion', 'generatedAt', 'builtFrom', 'assets', 'files', 'holo', 'ships')
 SHIPS_ZIP = 'ships.zip'         # the one archive the app downloads: ships/** and outlines.json (SD4)
+# Flat assets of their own with the section `hauling` (H1, SD14, SD2 addendum): not in files, not in ships.zip - the
+# manifest readers of app v0.6.0/v0.7.0 accept only outlines.json and ships/** in files (hauling-data-format.md).
+HAULING_FILES = {'templates': 'hauling-templates.json', 'positions': 'positions.json'}
 
 
 class ManifestError(ValueError):
@@ -24,15 +27,17 @@ def sha256(path: Path) -> str:
 def data_files(stage: Path) -> list[str]:
     """Every file of the release except holograms and the manifest, as relative POSIX paths."""
     return sorted(p.relative_to(stage).as_posix() for p in stage.rglob('*')
-                  if p.is_file() and p.suffix != '.holo' and p.name not in ('manifest.json', 'NOTICE.md'))
+                  if p.is_file() and p.suffix != '.holo' and p.relative_to(stage).as_posix() not in
+                  ('manifest.json', 'NOTICE.md', *HAULING_FILES.values()))
 
 
 def build(stage: Path, *, data_version: str, generated_at: str, motherlode: dict, app_tag: str, pipeline_commit: str,
-          tools: dict, holo_ships: dict[str, dict] | None, ships: dict[str, dict]) -> dict:
+          tools: dict, holo_ships: dict[str, dict] | None, ships: dict[str, dict], hauling: dict | None = None) -> dict:
     """holo_ships: slug -> {model, rawSha256, budget, triangles, edges, passed, fails, metrics}; file, bytes and sha256 are taken
     from stage/<slug>.holo, which is also the asset's name. None is the kill switch (holo: null). ships: id -> {missingSince, follows, orderKeys}; source,
     modelKey and racksSha256 come from the ship file; orderKeys (the catalog's grid order, SD2) from `ships` too, None when
-    the order is not known (a ship not written from a catalog yet)."""
+    the order is not known (a ship not written from a catalog yet). hauling: the section of the two hauling files in the
+    stage (hauling.check.section), None when this release has none (written as null)."""
     holo = None
     if holo_ships is not None:
         files = {p.stem: p for p in sorted(stage.glob('*.holo'))}
@@ -51,7 +56,8 @@ def build(stage: Path, *, data_version: str, generated_at: str, motherlode: dict
                               'follows': extra.get('follows')}
     return {'dataVersion': data_version, 'schemaVersion': SCHEMA_VERSION, 'generatedAt': generated_at,
             'builtFrom': {'motherlode': motherlode, 'appTag': app_tag, 'pipelineCommit': pipeline_commit, 'tools': tools},
-            'assets': {'ships': SHIPS_ZIP}, 'files': {rel: sha256(stage / rel) for rel in data_files(stage)}, 'holo': holo, 'ships': entries}
+            'assets': {'ships': SHIPS_ZIP}, 'files': {rel: sha256(stage / rel) for rel in data_files(stage)}, 'holo': holo,
+            'hauling': hauling, 'ships': entries}
 
 
 def write(path: Path, m: dict) -> None:
@@ -74,6 +80,12 @@ def read(path: Path) -> dict:
     no_fails = [s for s, e in sorted(((m['holo'] or {}).get('ships') or {}).items()) if not isinstance(e.get('fails'), list)]
     if no_fails:
         raise ManifestError(f'{path}: hologram entries without fails: {", ".join(no_fails[:8])}')
+    h = m.get('hauling')        # optional (SD2 addendum H1): releases before H1 have none
+    if h is not None and not (isinstance(h, dict) and isinstance(h.get('schemaVersion'), int) and all(
+            isinstance(h.get(k), dict) and h[k].get('file') == f and isinstance(h[k].get('bytes'), int)
+            and isinstance(h[k].get('sha256'), str) for k, f in HAULING_FILES.items())):
+        raise ManifestError((f'{path}: hauling must be null or {{schemaVersion, templates, positions}} with the flat files '
+                             f"{', '.join(HAULING_FILES.values())}, is {h!r}")[:300])
     bad_order = [s for s, e in sorted(m['ships'].items()) if 'orderKeys' not in e or not (
         e['orderKeys'] is None or (isinstance(e['orderKeys'], list) and all(isinstance(k, str) for k in e['orderKeys'])))]
     if bad_order:
@@ -96,4 +108,8 @@ def check(stage: Path, m: dict, holograms: bool = True) -> list[str]:
         p = stage / e['file']
         if not p.exists() or p.stat().st_size != e['bytes'] or sha256(p) != e['sha256']:
             problems.append(f"{e['file']}: size or SHA-256 differs from the manifest")
+    for e in (m['hauling'][k] for k in HAULING_FILES) if m.get('hauling') and holograms else []:
+        p = stage / e['file']
+        if not p.exists() or p.stat().st_size != e['bytes'] or sha256(p) != e['sha256']:
+            problems.append(f"{e['file']}: length or SHA-256 differs from the manifest")
     return problems

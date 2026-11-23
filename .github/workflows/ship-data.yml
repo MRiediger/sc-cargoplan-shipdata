@@ -2,9 +2,12 @@
 # Every step calls run.py or installs the pinned tools: no logic here (TASKS.md, lesson of S12.0); the `if:` lines only
 # read the stages' own outputs. A run ends with nothing (heartbeat), a release, or a PR whose merge publishes the
 # draft - or red (SD10, SD11).
-#   chain           ubuntu   tests, fetch (the one API call), previous, diff, build, verify, draft release
+#   chain           ubuntu   tests, fetch (the one API call), previous, hauling (H1: never stops the chain, K2), diff,
+#                            build, verify, draft release
 #   gate            windows  last release and draft rendered with the same app, hash-exact (SD3); contact sheets
 #   publish | pr    ubuntu   after a green gate: publish the draft, or open the PR (merge = approval, P6)
+#   hauling-pr      ubuntu   a failed hauling step (H1, E1): alias PR on data/hauling-aliases (gap) or the issue
+#                            "Hauling job failed"; publishes nothing
 #   publish-merged  ubuntu   on the push of state/pending.json by Martin's merge: publish exactly that draft
 #   heartbeat       ubuntu   state/last-run.json and the run's one line, in every run but a dry run (SD9)
 # Artifacts carry reports only (JSON, CSV of hashes, the stages' summaries): never the catalog, ship files, holograms
@@ -50,6 +53,10 @@ jobs:
       appTag: ${{ steps.pins.outputs.appTag }}
       previous: ${{ steps.previous.outputs.previous }}
       changed: ${{ steps.diff.outputs.changed }}
+      hauling: ${{ steps.hauling.outputs.status }}
+      haulingStep: ${{ steps.hauling.outcome }}
+      # outcome: the step's result before continue-on-error (GitHub docs, Contexts reference, steps context): failure
+      # for a crashed hauling step, while the job goes on (K2)
       path: ${{ steps.verify.outputs.path }}
       tag: ${{ steps.draft.outputs.tag }}
     steps:
@@ -87,6 +94,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python -I tools/run.py previous
+      - name: Hauling (templates and positions; a failure never stops the ship data - K2)
+        id: hauling
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -I tools/run.py hauling
       - name: Diff
         id: diff
         run: python -I tools/run.py diff --previous work/previous-release
@@ -126,6 +139,8 @@ jobs:
             work/diff.json
             work/build.json
             work/verify.json
+            work/hauling.json
+            work/hauling-aliases-proposed.json
             out/numbers.tsv
             out/say-*.jsonl
           retention-days: 30
@@ -282,6 +297,50 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  hauling-pr:
+    name: hauling report (ubuntu)
+    needs: chain
+    if: always() && (needs.chain.outputs.hauling == 'failed' || needs.chain.outputs.haulingStep == 'failure')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - name: Python packages (pins)
+        run: python -m pip install --disable-pip-version-check -q -r tools/requirements.txt
+      - uses: actions/download-artifact@v8
+        with:
+          name: reports-chain
+      - name: Alias PR or issue
+        if: inputs.dry-run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -I tools/run.py hauling-pr
+      - name: Alias PR or issue (dry run, text only)
+        if: inputs.dry-run == true
+        run: python -I tools/run.py hauling-pr --dry-run
+      - name: Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports-hauling-pr
+          path: |
+            tools/pins.json
+            out/hauling-pr-body.md
+            out/hauling-issue.md
+            out/say-*.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+
   publish-merged:
     name: publish after the merge (ubuntu)
     if: github.event_name == 'push'
@@ -334,7 +393,7 @@ jobs:
 
   heartbeat:
     name: heartbeat (ubuntu)
-    needs: [chain, gate, publish, pr, publish-merged]
+    needs: [chain, gate, publish, pr, hauling-pr, publish-merged]
     if: always() && !inputs.dry-run
     runs-on: ubuntu-24.04
     timeout-minutes: 10

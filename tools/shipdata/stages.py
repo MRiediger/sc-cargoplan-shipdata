@@ -4,7 +4,9 @@
   diff     -> work/previous/ (the last release's ships.zip), work/ships/ (import, first run), work/import-1.json,
               work/model-map-1.csv, work/previous-order.json, work/diff.json
   build    -> work/holo/<className>/PP.holo..., work/outlines.json, work/import-2.json (anchors), work/build.json
-  verify   -> work/stage/ (ships/, outlines.json, <slug>.holo, manifest.json), work/verify.json, work/overrides-proposed.json
+  hauling  -> work/hauling/ (hauling-templates.json, positions.json), work/hauling.json (shipdata/hauling/stage.py, H1)
+  verify   -> work/stage/ (ships/, outlines.json, <slug>.holo, the two hauling files, manifest.json), work/verify.json,
+              work/overrides-proposed.json, work/hauling-notes.md
   release  -> out/release/ (--dry-run) or out/seed/ (--seed): the flat assets manifest.json, NOTICE.md, ships.zip, <slug>.holo
 
 Exit codes: 0 done, 1 error, 2 a rule fired (PR path). Every stage ends with checked / found / to do."""
@@ -21,6 +23,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from shipdata import chain, diff, fetch, importer, manifest, release, rules
+from shipdata.hauling import check as hauling_check
+from shipdata.hauling import stage as hauling
 from shipdata.log import Reporter
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -142,13 +146,15 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
     overrides = {o['id'] for o in load_json(p.root / 'overrides.json')['ships']} if (p.root / 'overrides.json').exists() else set()
     import_stops = sorted(e['id'] for e in r.entries
                           if e['status'] == 'handcheck' or (e['status'] == 'kept' and e['id'] not in overrides))
-    nothing = diff.nothing_changed(changes, models, back, order_changed, import_stops)
+    ships_nothing = diff.nothing_changed(changes, models, back, order_changed, import_stops)
+    hauling_changed = hauling.changed(p)        # SD14: a hauling change alone releases (gate with unchanged ships)
+    nothing = ships_nothing and not hauling_changed
     save_json(p.w('diff.json'), {'previous': str(previous.resolve()), 'previousData': str(data.resolve()),
                                  'previousDataVersion': m['dataVersion'],
                                  'order': {'compared': compared, 'changed': order_changed},
                                  'orderNotCompared': unchecked, 'ships': dict(asdict(changes), stillGone=still_gone, back=back),
                                  'models': asdict(models), 'import': {'rc': r.rc, 'status': status, 'stops': import_stops},
-                                 'nothingChanged': nothing})
+                                 'haulingChanged': hauling_changed, 'nothingChanged': nothing})
     log.output('changed', 'false' if nothing else 'true')
     for k in ('changed', 'new', 'gone'):
         log.num(f'diff.ships.{k}', len(getattr(changes, k)))
@@ -163,9 +169,12 @@ def diff_stage(p: Paths, log: Reporter, previous: Path) -> int:
             f"{len(back)} back ({show(back)}), {len(changes.same)} same; models: {len(models.changed)} changed "
             f"(re-export), {len(models.new)} new, {len(models.without_url)} without URL ({show(models.without_url)}), "
             f"{len(models.unused)} unused ({show(models.unused)}); grid order compared for {compared} ships, "
-            f"{status.get('order', 0)} in another order, not compared for {len(unchecked)} ({show(unchecked)}); import {status}",
+            f"{status.get('order', 0)} in another order, not compared for {len(unchecked)} ({show(unchecked)}); import {status}; "
+            f"hauling data {'changed' if hauling_changed else 'unchanged or failed'}",
             'none: nothing changed' if nothing else
-            'build the changed and new models, then verify' + (f"; import stops: {show(import_stops)}" if import_stops else ''))
+            ('build the changed and new models, then verify' if not ships_nothing else
+             'ships unchanged, hauling data changed: build (0 models), verify, gate as for any release')
+            + (f"; import stops: {show(import_stops)}" if import_stops else ''))
     return 0
 
 
@@ -346,6 +355,15 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
             shutil.copyfile(previous / e['file'], stage / f'{slug}.holo')
             holo_ships[slug] = {k: v for k, v in e.items() if k not in ('file', 'bytes', 'sha256')}
 
+    # Hauling (K2): this run's files, else the last release's unchanged, else none - never a stop.
+    h_folder, h_state, h_note = hauling.release_files(p, previous)
+    if h_folder is not None:
+        for name in hauling_check.FILES:
+            shutil.copyfile(h_folder / name, stage / name)
+    h_section = hauling_check.section(stage) if h_folder is not None else None
+    hauling.write_notes(p, h_state, h_note)
+    findings.append(rules.Finding('hauling', '-', f'{h_state}: {h_note}', False))
+
     # orderKeys: the catalog's for a ship written from it in this run, otherwise the last release's (gone, kept, order).
     written = {e['id']: e['orderKeys'] for e in entries if e['status'] in ('same', 'updated', 'created')}
     order_keys = {sid: written[sid] if sid in written else (m['ships'].get(sid) or {}).get('orderKeys')
@@ -358,7 +376,7 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
     new_m = manifest.build(stage, data_version=b['dataVersion'], generated_at=b['generatedAt'],
                            motherlode={'gameBuild': catalog['gameBuild'], 'updatedAt': catalog['updatedAt']}, app_tag=app_tag,
                            pipeline_commit=pipeline_commit(), tools=tool_versions(),
-                           holo_ships=holo_ships if m.get('holo') is not None else None, ships=extra)
+                           holo_ships=holo_ships if m.get('holo') is not None else None, ships=extra, hauling=h_section)
     manifest.write(stage / 'manifest.json', new_m)
     problems = manifest.check(stage, new_m)
     findings += [rules.Finding('manifest', '-', pr, True) for pr in problems]
@@ -373,7 +391,8 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
     save_json(p.w('verify.json'), {'findings': [asdict(f) for f in findings], 'stop': bool(stops),
                                    'files': {'same': same_files, 'of': len(new_m['files'])},
                                    'holo': {'built': len(b['built']), 'byteEqualToPrevious': same_bytes,
-                                            'unavailable': b['unavailable']}})
+                                            'unavailable': b['unavailable']},
+                                   'hauling': {'state': h_state, 'note': h_note}})
     log.num('verify.files.same', same_files)
     log.num('verify.files', len(new_m['files']))
     log.num('verify.holo.byte-equal', same_bytes)
@@ -386,7 +405,7 @@ def verify_stage(p: Paths, log: Reporter, app_tag: str, today: str) -> int:
             f"manifest {b['dataVersion']} written and every file checked against it",
             f"files equal to {m['dataVersion']}: {same_files} / {len(new_m['files'])}; rebuilt holograms byte-equal: "
             f"{same_bytes} / {len(b['built'])}, {len(unav)} models no longer available ({', '.join(sorted(unav.values())) or '-'}); "
-            f"{len(stops)} stops, {len(findings) - len(stops)} notes",
+            f"hauling {h_state}; {len(stops)} stops, {len(findings) - len(stops)} notes",
             'none: release' if not stops else
             f"PR path: {'; '.join(f'{f.rule} {f.id}' for f in stops[:8])}" + ('; overrides-proposed.json written' if proposals else ''))
     return 2 if stops else 0
@@ -411,8 +430,12 @@ def release_stage(p: Paths, log: Reporter, dry_run: bool) -> int:
     log.num('release.assets', len(assets))
     log.num('release.holo', len(holos))
     log.num('release.bytes', total)
+    # A16: the hauling files are assets of their own (section hauling, H1), so the summary names them or says none.
+    hauling = (', '.join(m['hauling'][k]['file'] for k in manifest.HAULING_FILES) if m.get('hauling')
+               else 'no hauling files (hauling: null)')
     log.say('release --dry-run', f"stage of {m['dataVersion']} against its manifest, packed to {p.out / 'release'} with NOTICE.md",
-            f"{len(assets)} assets, {total} bytes: manifest.json, NOTICE.md, {m['assets']['ships']}, {len(holos)} x .holo; "
+            f"{len(assets)} assets, {total} bytes: manifest.json, NOTICE.md, {m['assets']['ships']}, {hauling}, "
+            f"{len(holos)} x .holo; "
             'nothing uploaded, the model cache untouched',
             'none (publishing: run.py draft, then publish after a green gate)')
     return 0

@@ -608,6 +608,54 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 - [x] TASKS.md: Phase 12 geschlossen, Backlog mit Anlässen, keine offenen `[ ]` außer Backlog
 - [x] Merge `--no-ff` nach Freigabe, Push durch CC (Shipdata-Regel)
 
+## Phase 13 (App) – Hauling-Daten für den Routenplaner (gestartet 21.11.2026)
+
+**Zielbild:** App-Phase 13 „Cargo-Routen“ (`sc-cargoplan/TASKS.md`, D118, D119) braucht jedes Hauling-Template und die Positionen der Orte. Der Monatslauf liefert beide als flache Assets mit Manifest-Abschnitt `hauling`; Vertrag ist `sc-cargoplan/docs/hauling-data-format.md`. Review im Master-Chat „SC-CargoPlan | Cargo-Routen Umsetzung“. App-Gegenstück: T13.3 liest die Dateien.
+
+### [x] H1 Hauling-Job (Plan freigegeben 21.11.2026 mit K1–K3, E1, `docs/plans/H1-hauling.md`, Branch `feat/h1-hauling`; abgenommen 23.11.2026)
+
+**Warum:** Ohne Templates kennt der Planer kein Board ohne Anflug, ohne Positionen keine Distanz; beides steht in den Spieldateien und soll monatlich mit den Schiffsdaten kommen, ohne sie je aufzuhalten (K2).
+- Schritt `hauling` in `chain`, Paket `tools/shipdata/hauling/` (source, templates, positions, check, diff, stage), `run.py hauling` und `hauling-pr`, Job `hauling-pr`
+- `tools/hauling-aliases.json`; Manifest-Abschnitt `hauling` (SD2-Addendum), `docs/manifest-format.md` wortgleich zum Vertrag; SD14; `NOTICE.md`
+
+**Präzisierung in der Planphase, ratifiziert durch Freigabe (21.11.2026):**
+1. **Quelle `StarCitizenWiki/scunpacked-data` statt Wiki-API** (S-H0, R2): ein Commit für Templates und Starmap, `gh api` + ein Tarball-GET statt 1 862 API-Rufe; kein API-Fallback gebaut (Backlog).
+2. **Schritt in `chain` statt eigenem Job** (R3): ein Job müsste CIG-Material als Artefakt übergeben (SD10); `continue-on-error` am Schritt.
+3. **Ein Unterbefehl `run.py hauling` statt fünf**, fünf Zusammenfassungen (`hauling-fetch` … `hauling-diff`).
+4. **Lücke als eigener PR auf `data/hauling-aliases`, kein Stopp-Befund im Daten-PR** (R4); **E1:** `hauling-pr` meldet jeden Fehlschlag, sonst als Issue „Hauling job failed“. `close_superseded` lässt den Alias-PR offen.
+5. **Vertrags-Addenda** (R1, App-Session als Doku-Commit): V1 `source.repository/commit/gameBuild/fetchedAt` im Templates-Kopf; V2 Rang `trainee`; V3 „Extra Small“ → `xs`, `bulk`; V4 Auftraggeber aus `MissionGiver`; V6 `drop` in der Alias-Tabelle; V8 nicht ausdrückbare Templates fallen mit Grund weg; **K1** Positionsname = Starmap-Name, eindeutig je System, `contractNames[]`, Pools tragen den Starmap-Namen; **K2** Loader-Regel nur `len(legs) ≥ 1`, die Formel `min(stops × Waren, 4)` ist Changelog-Hinweis; **K3** Name eindeutig je System, erster gewinnt; `Star` im Positions-Filter.
+6. **Akzeptanzzahlen** (R5, R6): Red Wind 194 (Vertragsfilter) statt 208; „provozierter Fehler ergibt PR“ = Dry-Run zeigt den Text, die PR-Anlage deckt der FakeGitHub-Test ab.
+7. **K2-Variante:** Vorgänger weitertragen, `null` nur ohne gültigen Vorgänger; Hauling-Diff allein = Release; „verschoben“ ab 1 km.
+
+**Akzeptanz:**
+- [x] Datenprobe gegen den Pin (Zahlen unten): 89 / 21 auf den UUIDs des Dumps reproduziert, Red Wind 194, Hubs, 18 L-Stationen, Ruin Station, Checkmate, Orbituary, 1,3 / 22,9 Gm
+- [x] Loader-Checks der App als pytest (`test_hauling_check.py`, jede Regel einmal rot) und im Lauf (`hauling-verify`: 0 Probleme)
+- [x] K2 provoziert: Quellfehler, Lücke, unbekanntes Wort, Absturz → `failed`, Exit 0, Vorgänger bzw. `null`; Schiffsrelease unberührt (Tests)
+- [x] `pytest` grün, wörtlich zitiert
+- [x] Dry-Run auf `feat/h1-hauling` (Martin klickt), Summary mit den fünf Hauling-Zeilen, `release --dry-run` listet beide Assets (Lauf 45004552167, Befund 12)
+- [x] Dry-Run mit provozierter Alias-Lücke: Hauling `failed`, Schiffskette grün, `out/hauling-pr-body.md` mit dem Namen (Lauf 45145705025, Befund 13)
+- [x] Verify-Tests gegen die Vertragsfassung mit den Addenda abgeglichen: App-T13.0a, abgenommen 22.11., in App-main gemergt (`b6652cc`); der Vertrag folgt `check.py` auch bei Pool-Namen ohne System
+- [x] Abnahme (Claude.ai, 23.11.), Merge `--no-ff` nach `main`
+- [ ] Echter Lauf (Martin: Dispatch) → Daten-PR (judge orig-135c, Plan Schritt 8) → nach Martins Merge Data-Release `ships-2026.11.2` mit Abschnitt `hauling` (Übergabe an T13.3)
+
+**H1 Befund (21.11.2026):**
+1. **S-H0:** `scunpacked-data` `master` = `f182b7f` (13.11., „4.10.3-LIVE.13165946“), `contracts/` 5 166 Dateien, alle 1 843 Hauling-UUIDs des Dumps, Felder gleich (`mission_tokens` identisch; Regel der API: roh `MaxScu = 0` → `max_scu = MinScu`, `min_scu = null`). Tarball **195 522 208 B in 28,6 s**, Streamen und Filtern **3,9 s**; `run.py hauling` lokal (gespeicherter Tarball) **6,0 s**. Wiki-API: kein Zeitstempel je Mission, keine Rate-Limit-Header → Abschnitt 3.4 (`updated_at`) entfällt.
+2. **Martins API-Dump ist unvollständig:** 1 865 Listenzeilen, 1 843 verschieden – 22 Duplikate über Seitengrenzen haben 22 Einträge verdrängt (Paginierung). Die API kennt die fehlenden (Stichprobe `3a656950…`: `reward_scope` Hauling, released, 4.10.3). Im Rohrepo sind sie da: **19 der 587 Templates fehlen im Dump**, alle Rewards der übrigen 568 gleich dem Dump.
+3. **Everus/Senior-Board:** auf den Dump-UUIDs **89 / Stanton1 21** (Design §7.3 exakt); mit vollständiger Quelle **92 / Stanton1 23**. Lokale Stellar-Blöcke ≤ Senior, voll gegen Dump gegen Scan: Hurston 23 / 21 / 22, Crusader **19** / 18 / **19**, ArcCorp **22** / 21 / **22**, microTech 20 / 19 / –. Die vollständige Quelle erklärt die „ein Vertrag mehr gescannt“-Abweichung aus §7.3.
+4. **Templates:** 1 092 Kandidaten der zwei Namensschemata → **587** (Covalex interstellar 16, local 28, planetary 189, stellar 160; Red Wind local 6, planetary 80, stellar 108). Ausgeschlossen: Leg ohne SCU-Band 273, `TEMPLATE` 153, nicht released 33, keine Area im Namen 11, Dead Saints 8, Titelform 8, Ling Family 7, Kistengröße −1 5, Form ohne Stoppzahl 6, Missionstyp „Hauling“ 1. **Red Wind 194** (alle `RedWind_Pyro_`; die 7 `HaulCargo_*_Interstellar` von Red Wind fallen unter V8). Leg-Formel (K2): **0** Abweichungen. Rewards `null`: alle 108 Red-Wind-Stellar.
+5. **Positionen:** **157** (Stanton 104, Pyro 34, Nyx 19; nach Typ Stanton Manmade 26, Manmade_VisibleOnInteraction 21, Outpost 40, Moon 8, LandingZone 4, Planet 4, Star 1; Pyro Manmade 4, M_VoI 9, Outpost 14, Planet 6, Star 1; Nyx Manmade 15, Planet 3, Star 1); 102 von Pools genannt; 29 Positionen mit 38 `contractNames`. 4 Hubs, 18 L-Stationen, Ruin Station / Checkmate / Orbituary (je mit Langform). **Everus → HUR-L1 1,289 Gm, → Baijini 22,882 Gm.** Starmap: 12 `uuid`s für 617 Einträge (Asteroiden, POIs, `unknown`) – ausgeschlossen, keiner unserer Orte betroffen.
+6. **Alias-Tabelle:** **62** Einträge, 0 Lücken: 38 auf eine `uuid` (10 Pyro-Langformen, 3 Umbenennungen, 15 Orte in einer Stadt oder auf einem Körper, 10 „<Körper> Derelict Outpost“), **24 `drop`** (10 Raum-/Zonen-Platzhalter, 5 Wracks, 5 Oberflächenorte ohne Starmap-Eintrag, 2 generische Namen, 1 Beschreibungstext, Magnus Gateway). 7 Zuordnungen aus Spielkenntnis tragen `note` „check“ (Riker, Teasa, August Dunlow, NB Int., Aspire Grand, Maria Pure of Heart, Pyro Gateway). 2 354 Pool-Namen fallen per `drop` weg.
+7. **Dateien:** `hauling-templates.json` **570 973 B**, `positions.json` **42 563 B** (Vertragsbeispiel nannte ≈ 1,5 MB).
+8. **„Verschoben“-Schwelle:** Starmap 4.10.2 (`5ee0a3d`) → 4.10.3: 4 Einträge bewegt, 3 > 1 km (bis 69,7 Gm), **keiner unserer Positionen**; eine Bewegung < 1 m (Rundung). 1 neu, 49 weg (keiner von uns), 0 umbenannt.
+9. **Für T13.3 (App):** Alle **75** systemweiten Covalex-Stellar-Templates (`Stanton`) haben einen **leeren Drop-off-Pool**, 19 auch einen leeren Pickup-Pool; **kein** Stellar-Template nennt einen der vier Hubs.
+10. **Tests:** 171 → 267. Provoziert rot und zurück grün: Alias-PR überlebt Publish, Hauling-Dateien nicht in `files`/ZIP, Quellfehler = `failed`, Weitertragen, `continue-on-error`, K3, SD14 (`changed`), E1, geteilte `uuid`. **SD14 blieb beim ersten Versuch grün** – der Test prüfte `changed()` nicht; nachgeschärft.
+11. **Anfragen der Session:** 0 Motherlode; Wiki-API 2 (1 Liste im Spike, 1 Detail-Stichprobe); 2 Tarball-GET (Spike gestreamt, Entwicklungskopie); raw.githubusercontent: Starmap 4.10.3 (Analyse) und 4.10.2, einzelne Vertragsdateien im Spike; kein Lauf auf Actions.
+12. **Dry-Run 1** (45004552167, 22.11., auf `c47373a`): Quelle `3cc8072b24df` (neuer Commit, gleicher Build 4.10.3-LIVE.13165946), 2 Anfragen, 5 166 Vertragsdateien / 1 092 Kandidaten, Starmap 1 804 Einträge. Alle Zahlen gleich dem lokalen Lauf auf `f182b7f`: **587** Templates (Ausschlüsse je Grund identisch), **157** Positionen, 102 von Pools genannt, **2 354** Drops, 0 Hinweise, `hauling-verify` 0 Probleme, 570 973 + 42 563 B; Diff gegen `ships-2026.11.1` (ohne Hauling): 587 / 157 neu → Release. `release --dry-run`: **107 Assets, 32 800 291 B** inkl. beider Hauling-Dateien (die „found“-Zeile nannte sie nicht → A16, `513b91a`). Verify-Stopp „PR path: judge orig-135c“ = Schiffsseite (SD5 Fall 4), kein H1-Befund; der echte Lauf geht über den Daten-PR (Plan Schritt 8). **Drops je `missionType`** (nachgerechnet auf `f182b7f`): planetary 1 741, local 563, stellar **34**, interstellar 16 (Magnus Gateway). Die 34 liegen in drei Templates (Stanton4 Exp Direct Medium 9→1, Stanton1 Exp Direct Medium 51→28, Stanton3 Senior Medium 19→9), keine Station, kein leerer Pool – akzeptiert (Claude.ai 22.11.); neue Regel „stellar-Pool, den nur Drops leeren, = Lücke“ (SD14-Addendum, `513b91a`), auf den echten Daten 0 Treffer. Unter „Leg ohne SCU-Band 273“ (Planetary 254, Interstellar 19) und „Titelform 8“ (Rohtyp `Hauling`) kein stellar-Template.
+13. **Dry-Run 2** (45145705025, 23.11., auf `66e435f` = Checkmate-Langform aus der Alias-Tabelle entfernt): Hauling **`failed` (gap)**, genau 1 Lücke „Checkmate at the L4 Lagrange of Pyro II“ (pyro, **119** Templates), Vorschlag `07463f54…` → Checkmate im PR-Text; `chain` grün, Verify „hauling none: no hauling data“ (Vorgänger ohne Hauling), `release --dry-run` **105 Assets, 32 186 425 B**, „no hauling files (hauling: null)“; `hauling report` grün (24 s), im Dry-Run nur `out/hauling-pr-body.md`. Zwei Fehler im PR-Text: „the last hauling files are carried“ ohne Vorgänger-Dateien und „1 place names“ → `311fdb3` (`carriedFrom` in `work/hauling.json`, Singular/Plural). Lücke revertiert (`958fe3a`).
+14. **Tests:** 267 → 270 (stellar-Pool durch Drops geleert, „found“-Zeile, PR-Text getragen/keine Daten + Singular); jeder neue Test zuerst rot. Test-Fixture `u2` ist jetzt planetary (ihr Pool wird durch den Drop `Lobby` leer, was für stellar nun verboten ist).
+
+**pytest** komplett (WSL, Pins, `tools/local-wsl.sh test`, auf `958fe3a`, nach dem Revert): `270 passed in 57.91s`.
+
 ---
 
 ## Lehren
@@ -655,7 +703,9 @@ Konsolidiert in T12.6b (19.11.2026). Jede Zeile: **was** – Anlass – Herkunft
 - **WSL-Werkzeuge unter `/root` (fragil).** Der WSL-Standardbenutzer wechselte in T12.1 von `root` auf `artiniediger`; die Werkzeuge liegen unter `/root/s12tools`, `local-wsl.sh` läuft nur mit `wsl -u root` und braucht den `safe.directory`-Umweg. Reaktion: Werkzeuge unter den Standardbenutzer (`SHIPDATA_TOOLS`) neu aufsetzen. – **Anlass:** es hakt wieder. – T12.1
 
 **Format und Vertrag**
-- **`NOTICE.md` in `files`** des Manifests (heute nur ZIP-Inhalt; `NOTICE.md` ist Asset ohne Hash im Vertrag). – **Anlass:** die nächste Manifest-Formatänderung (SD2-Addendum). – T12.6b R4
+- **`NOTICE.md` in `files`** des Manifests (heute nur ZIP-Inhalt; `NOTICE.md` ist Asset ohne Hash im Vertrag). H1 war eine Formatänderung, hat es aber nicht gebaut: die Reader von App-v0.6.0/v0.7.0 lassen in `files` nur `outlines.json` und `ships/**` zu. – **Anlass:** ein App-Release, dessen Reader `NOTICE.md` in `files` akzeptiert. – T12.6b R4, H1
+- **Hauling-Quelle API statt Rohrepo:** `fetch` über `api.star-citizen.wiki` (Muster `routing-fetches/fetch-hauling.ps1`; Liste per `meta.last_page`, Detail je UUID, Duplikate über Seitengrenzen beachten). – **Anlass:** `scunpacked-data` hängt einen Build hinter der API oder verschwindet. – H1 (S-H0)
+- **Alias-Einträge aus Spielkenntnis prüfen** (7 mit `note` „check“ in `tools/hauling-aliases.json`). – **Anlass:** ein Scan in T13.3 zeigt einen anderen Ort. – H1
 - **Holo-Formatwechsel** = `holo.formatVersion` hochzählen + SD-Eintrag, **kein** `schemaVersion`-Bump (SD13). – **Anlass:** ein neues Holo-Format. – App-T12.4 R1
 
 **Repo und Abläufe**

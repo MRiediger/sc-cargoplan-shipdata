@@ -10,7 +10,7 @@ Martin, 20+ Jahre IT (PowerShell, M365, Power Platform, Netzwerk). Python ist Le
 ## Rollen (verbindlich)
 
 - **Claude Code** plant und baut. Ein Task pro Session.
-- **Claude.ai** reviewt jeden Plan im Master-Chat „SC-CargoPlan | Phase 12“: Freigabe oder `korrektur-<Task>.md` im Repo-Ordner.
+- **Claude.ai** reviewt jeden Plan im Master-Chat (Phase 12: „SC-CargoPlan | Phase 12“; Phase 13, H-Tasks: „SC-CargoPlan | Cargo-Routen Umsetzung“): Freigabe oder `korrektur-<Task>.md` im Repo-Ordner.
 - **Martin** entscheidet, klickt (Dispatch, Approve, Merge, Repo-Settings), testet am Aufzug. **Martin tippt keine Pipeline-Befehle.** Braucht ein Schritt einen Befehl von ihm, ist das ein Befund gegen die Pipeline.
 
 ## Arbeitsweise (verbindlich)
@@ -38,14 +38,18 @@ v0.5.1 der App brauchte einen halben Tag Handarbeit für drei neue Schiffe: vier
 ```
 ship-data.yml – cron `23 4 1 * *` + workflow_dispatch (dry-run)
   1  Motherlode-API (Secret MOTHERLODE_API_KEY) + Modelle holen, Cache nach Modell-SHA
-  2  Diff gegen das letzte Data-Release: neu / geändert / verschwunden
+  1b hauling (H1, SD14): scunpacked-data (ein Commit: contracts/ + starmap_positions.json) → hauling-templates.json,
+     positions.json, Alias-Tabelle, Loader-Checks der App, Diff; Fehlschlag = `failed`, nie ein Stopp (K2),
+     hauling-pr meldet ihn (Alias-PR auf data/hauling-aliases oder Issue „Hauling job failed“)
+  2  Diff gegen das letzte Data-Release: neu / geändert / verschwunden; ein Hauling-Diff allein zählt (SD14)
   3  kein Unterschied → kein Release; Lebenszeichen-Commit `state/last-run.json`
   4  Racks, Holos (nur geänderte Modelle), Umrisse, Anker – ein Lauf
   5  Regressions-Gate (windows-latest): Checkout sc-cargoplan auf gepinntem Tag,
      alter und neuer Datenstand im selben Job gerendert (ShipPictureTests),
      nur geänderte Schiffe dürfen abweichen
   6  Entwurfs-Release ships-YYYY.MM[.N] (SD10), Assets flach (SD4): manifest.json (zuletzt), NOTICE.md,
-     ships.zip (ships/** + outlines.json), <slug>.holo je Schiff; Kontaktabzug am Entwurf
+     ships.zip (ships/** + outlines.json), <slug>.holo je Schiff, hauling-templates.json + positions.json
+     (Abschnitt `hauling`, H1); Kontaktabzug am Entwurf
      grün → Entwurf veröffentlichen, Hygiene, Modell-Cache prunen
      Regel feuert → PR auf data/YYYY.MM (state/pending.json + Befund); Martins Merge = Freigabe →
      publish-merged veröffentlicht genau diesen Entwurf; Gate rot → roter Lauf (SD11)
@@ -70,6 +74,9 @@ App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.s
 | neues Schiff | `modelKey` aus der Map, Anker aus dem Modell – kein Rack-Mitte-Fallback |
 | Lauf ohne Änderung | kein Release, aber Lebenszeichen-Commit (GitHub schaltet Cron nach 60 Tagen Repo-Stille ab) |
 | Motherlode weg | letzter Datenstand bleibt gültig (A11-Exit-Plan) |
+| Hauling-Job scheitert (Quelle, unbekanntes Titelwort, Prüfung rot, Absturz; K2, SD14) | Schiffsrelease läuft weiter; die Hauling-Dateien des Vorgängers gehen unverändert mit, ohne gültigen Vorgänger `hauling: null`; Issue „Hauling job failed“ (E1) |
+| Ortsname ohne Position (Alias-Lücke) | wie oben, dazu PR auf `data/hauling-aliases` mit vorgeschlagenen Einträgen; Merge erweitert `tools/hauling-aliases.json`, die Daten kommen mit dem nächsten Lauf |
+| Hauling-Inhalt geändert, Schiffe nicht (SD14) | Release mit 0 gebauten Modellen; das Gate rendert unveränderte Schiffe |
 
 ## Domänenfakten
 
@@ -78,7 +85,8 @@ App: liest …/releases/latest/download/manifest.json, lädt ships.zip (assets.s
 - **Umriss:** `outlines.json`, Meter, Ursprung unabhängig vom Rack-Nullpunkt, Zuordnung per `modelKey` (App-D90, D94).
 - **Holo:** Format SCH2 (`sc-cargoplan/docs/holo-format.md`), aus dem Motherlode-Modell: Flatten → Cull → Leiter 20k/30k/40k (meshoptimizer) → Export. CIG-Material: nie im Repo, nur Cache und Release-Asset, mit NOTICE; `holo: null` im Manifest ist der Kill-Switch.
 - **Anker:** `tools/import-motherlode.ps1` (seit T12.1 hier; die App-Kopie geht mit T12.5).
-- **Manifest** (`manifest.json` im Release, Format `docs/manifest-format.md`, ratifiziert mit SD2): `dataVersion`, `schemaVersion`, `generatedAt`, `builtFrom {motherlode {gameBuild, updatedAt}, appTag, pipelineCommit, tools}`, `assets {ships: "ships.zip"}`, `files {pfad im ZIP: sha256}`, `holo {formatVersion, ships {slug: {file, bytes, sha256, model, rawSha256, budget, …, passed, metrics}}} | null`, `ships {id: {source, modelKey, racksSha256, orderKeys, missingSince, follows}}`. Kein `holo.baseUrl`: die URL folgt aus `dataVersion`. Zähler und Herkunft je Schiff stehen **hier**, nicht in Extradateien.
+- **Manifest** (`manifest.json` im Release, Format `docs/manifest-format.md`, ratifiziert mit SD2): `dataVersion`, `schemaVersion`, `generatedAt`, `builtFrom {motherlode {gameBuild, updatedAt}, appTag, pipelineCommit, tools}`, `assets {ships: "ships.zip"}`, `files {pfad im ZIP: sha256}`, `holo {formatVersion, ships {slug: {file, bytes, sha256, model, rawSha256, budget, …, passed, metrics}}} | null`, `hauling {schemaVersion, templates {file, bytes, sha256}, positions {…}} | null` (optional, H1), `ships {id: {source, modelKey, racksSha256, orderKeys, missingSince, follows}}`.
+- **Hauling-Daten** (H1, SD14): Quelle `StarCitizenWiki/scunpacked-data` (octfx/ScDataDumper, dieselbe Extraktion wie api.star-citizen.wiki), `contracts/<uuid>.json` und `starmap_positions.json` aus **einem** Commit, Build aus der Commit-Message. Format: `sc-cargoplan/docs/hauling-data-format.md` (Schema 1 + Addenda der H1-Freigabe). CIG-Material wie die Holos: nie im Repo außer der Alias-Tabelle (Ortsnamen), nur Release-Asset mit NOTICE. Kein `holo.baseUrl`: die URL folgt aus `dataVersion`. Zähler und Herkunft je Schiff stehen **hier**, nicht in Extradateien.
 - **Lizenz:** Code MIT (`LICENSE`), Daten und Holos unter eigener `NOTICE.md` (CIG-Material, nicht MIT). Katalog, Modelle, Bilder, Erecs PDF nie committen.
 
 ## Technische Entscheidungen
@@ -108,6 +116,8 @@ sc-cargoplan-shipdata/
 │   ├── pins.json                  # appTag, runner, pwsh (SD8)
 │   ├── shipdata/                  # Python-Paket: fetch, diff, rules, manifest, release, chain, stages, importer, compare, log,
 │   │                              #   workflow (previous, draft, publish, pr, heartbeat), gate + sheet (Render-Gate), github (gh/git)
+│   │   └── hauling/               # H1: source, templates, positions, check, diff, stage (run.py hauling, hauling-pr)
+│   ├── hauling-aliases.json       # Vertragsname → Starmap-uuid oder drop (H1, K1, V6); Lücke → PR data/hauling-aliases
 │   ├── holo_mesh.py · simplify.mjs                # Holo-Kette, byte-gleich zu holo-v3 (docs/provenance.md)
 │   ├── import-motherlode.ps1 · ShipJson.ps1   # Racks + Anker (aus dem App-Repo gezogen, T12.1)
 │   ├── local-wsl.sh               # WSL Ubuntu 24.04 mit den Pins: setup · test · run
@@ -140,6 +150,8 @@ python -I tools/run.py draft [--folder <dir>]                   # Entwurfs-Relea
 python -I tools/run.py gate --app <checkout> --old <dir> --new <dir>  # Render-Gate lokal (Windows); im Workflow --old-tag/--new-tag
 python -I tools/run.py publish (--tag T | --pending state/pending.json)  # Entwurf prüfen, veröffentlichen, Hygiene, Prune
 python -I tools/run.py pr --tag T --dry-run                     # PR-Text nach out/pr-body.md (ohne --dry-run: Branch + PR)
+python -I tools/run.py hauling [--saved <dir>] [--previous <dir>]  # Hauling-Templates + Positionen nach work/hauling/ (H1); Fehlschlag = status failed, Exit 0
+python -I tools/run.py hauling-pr --dry-run                     # Text des Alias-PR bzw. Issues nach out/ (ohne --dry-run: PR oder Issue)
 pytest                                                          # alle Tests (lokal: tools/local-wsl.sh test)
 gh workflow run ship-data.yml -f dry-run=true    # Dispatch ohne Release (nur zum Lesen des Logs, Martin klickt)
 gh run view --log                                # Log des letzten Laufs
