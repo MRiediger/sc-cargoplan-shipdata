@@ -1,19 +1,26 @@
 {
- "date": "2026-11-18",
- "runId": "44340334581",
- "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/44340334581",
+ "date": "2026-11-23",
+ "runId": "45153231467",
+ "runUrl": "https://github.com/MRiediger/sc-cargoplan-shipdata/actions/runs/45153231467",
  "event": "workflow_dispatch",
- "result": "nothing",
- "line": "nothing changed",
- "dataVersion": null,
+ "result": "pr",
+ "line": "PR #2: 1 finding",
+ "dataVersion": "ships-2026.11.2",
  "previous": "ships-2026.11.1",
- "counts": {},
+ "counts": {
+  "changed": 1,
+  "new": 0,
+  "gone": 0,
+  "holosRefreshed": 1,
+  "findings": 1,
+  "hauling": "updated"
+ },
  "stages": [
   {
    "job": "chain",
    "step": "fetch",
-   "checked": "catalog from cryon.rocks, saved to /home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/cache/catalogs/2026-11-18/raw; 101 model URLs against cache/models",
-   "found": "4.10.3-LIVE.13165946, updatedAt 2026-11-16T11:36:30.299Z, 101 ships, 101 with a model; models {'cached': 101, 'fetched': 0, 'unavailable': 0}; requests: 1 API call, 1 page GET, 0 model GET",
+   "checked": "catalog from cryon.rocks, saved to /home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/cache/catalogs/2026-11-23/raw; 101 model URLs against cache/models",
+   "found": "4.10.3-LIVE.13220821, updatedAt 2026-11-21T13:41:23.013Z, 101 ships, 101 with a model; models {'cached': 100, 'fetched': 1, 'unavailable': 0}; requests: 1 API call, 1 page GET, 1 model GET",
    "todo": "none"
   },
   {
@@ -25,10 +32,80 @@
   },
   {
    "job": "chain",
+   "step": "hauling-fetch",
+   "checked": "StarCitizenWiki/scunpacked-data at 3cc8072b24df (gh api + one tarball GET)",
+   "found": "5166 contract files, 1092 of the two naming schemes; starmap 1804 entries; game build 4.10.3-LIVE.13165946; 2 requests",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "hauling-templates",
+   "checked": "1092 contracts against schema 1 (filter, both naming schemes, V8)",
+   "found": "587 templates (covalex interstellar 16, covalex local 28, covalex planetary 189, covalex stellar 160, redWind local 6, redWind planetary 80, redWind stellar 108); left out: leg without an SCU band 273, abstract template (TEMPLATE) 153, not released 33, no area in the name 11, other contractor (Dead Saints) 8, title not in the form of its contractor 8, other contractor (Ling Family Hauling) 7, container size -1 5, form without a stop count (SingleToMulti) 3, form without a stop count (MultiToSingle) 2, mission type Hauling 1, form without a stop count (Intro) 1",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "hauling-positions",
+   "checked": "pool names against the starmap and tools/hauling-aliases.json (62 entries)",
+   "found": "102 places named by pools; 157 positions (nyx 19, pyro 34, stanton 104); 2354 pool names dropped (V6); 0 hints",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "hauling-verify",
+   "checked": "the app's loader checks (K2, K3) and the pipeline's rules on both files",
+   "found": "0 problems; hauling-templates.json 570973 bytes, positions.json 42563 bytes",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "hauling-diff",
+   "checked": "against ships-2026.11.1 (no hauling data there)",
+   "found": "templates 587 new, 0 gone, 0 reward changed; places 157 new, 0 gone, 0 renamed, 0 moved; 0 templates off the leg count (K2)",
+   "todo": "none: changed - a release even if no ship changed (SD14)"
+  },
+  {
+   "job": "chain",
    "step": "diff",
-   "checked": "catalog 4.10.3-LIVE.13165946 (2026-11-16T11:36:30.299Z) against release ships-2026.11.1: manifest.json and ships.zip checked, 109 ship files without stamps, 100 models; grid order against the release's orderKeys",
-   "found": "ships: 0 changed (), 0 new (), 0 newly gone (), 8 gone before (600i_executive_edition, carrack_expedition_w_c8x, carrack_w_c8x, cyclone, mole_carbon_edition, mole_talus_edition, mustang_alpha_vindicator, valkyrie_liberator_edition), 0 back (), 101 same; models: 0 changed (re-export), 0 new, 1 without URL (TMBL_Cyclone), 2 unused (ANVL_Carrack_Expedition, ORIG_135c); grid order compared for 100 ships, 0 in another order, not compared for 0 (); import {'absent': 8, 'kept': 1, 'same': 100}",
-   "todo": "none: nothing changed"
+   "checked": "catalog 4.10.3-LIVE.13220821 (2026-11-21T13:41:23.013Z) against release ships-2026.11.1: manifest.json and ships.zip checked, 109 ship files without stamps, 100 models; grid order against the release's orderKeys",
+   "found": "ships: 1 changed (135c), 0 new (), 0 newly gone (), 8 gone before (600i_executive_edition, carrack_expedition_w_c8x, carrack_w_c8x, cyclone, mole_carbon_edition, mole_talus_edition, mustang_alpha_vindicator, valkyrie_liberator_edition), 0 back (), 100 same; models: 0 changed (re-export), 1 new, 1 without URL (TMBL_Cyclone), 1 unused (ANVL_Carrack_Expedition); grid order compared for 100 ships, 0 in another order, not compared for 1 (135c); import {'absent': 8, 'updated': 101}; hauling data changed",
+   "todo": "build the changed and new models, then verify"
+  },
+  {
+   "job": "chain",
+   "step": "build",
+   "checked": "1 models (changed and new): flatten, cull, ladder 20k/30k/40k, export, outline; outlines-v2 (101 entries kept); import with the new floors",
+   "found": "1 built in 22 s, 0 without model (-), 0 failed; import {'absent': 8, 'same': 100, 'updated': 1}",
+   "todo": "none"
+  },
+  {
+   "job": "chain",
+   "step": "verify",
+   "checked": "rules on 109 ships, 102 holograms, overrides.json (1 entries); manifest ships-2026.11.2 written and every file checked against it",
+   "found": "files equal to ships-2026.11.1: 3 / 111; rebuilt holograms byte-equal: 0 / 1, 0 models no longer available (-); hauling updated; 1 stops, 10 notes",
+   "todo": "PR path: judge orig-135c"
+  },
+  {
+   "job": "chain",
+   "step": "draft",
+   "checked": "/home/runner/work/sc-cargoplan-shipdata/sc-cargoplan-shipdata/out/release against its manifest; draft ships-2026.11.2 (target e56d20e66781), manifest.json uploaded last",
+   "found": "107 assets uploaded and checked against the manifest (manifest ba1606df68d4); 0 drafts of earlier runs deleted (-)",
+   "todo": "none: the gate renders the draft; it is published only after a green gate (or a merged PR)"
+  },
+  {
+   "job": "gate",
+   "step": "gate",
+   "checked": "ships-2026.11.1 and ships-2026.11.2 rendered with the same app in one job (480 s); 1 ships expected to change (data without stamps, hologram, outline)",
+   "found": "1427 pictures equal, 13 different, 0 missing, placement numbers differ for 1; unexpected: none; 1 contact sheets on draft ships-2026.11.2",
+   "todo": "none: publish or PR"
+  },
+  {
+   "job": "pr",
+   "step": "pr",
+   "checked": "verify.json (1 stops), diff.json, gate.json; draft ships-2026.11.2 (manifest ba1606df68d4)",
+   "found": "PR #2 on data/2026.11 (opened); committed state/pending.json; 0 superseded PRs closed",
+   "todo": "Martin: read PR #2; merge = the draft is published"
   }
  ]
 }
