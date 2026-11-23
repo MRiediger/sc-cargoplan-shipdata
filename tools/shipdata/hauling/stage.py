@@ -42,6 +42,18 @@ def write(path: Path, doc: object) -> None:
     path.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
 
 
+def count(n: int, word: str) -> str:
+    """'1 place name', '2 place names': the summaries and the PR say the number the way it is read."""
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def carried(h: dict) -> str:
+    """What the release holds when this run failed, from work/hauling.json (hauling-pr has no previous release folder):
+    the same previous_hauling() verify carries from (K2)."""
+    return (f"the hauling files of {h['carriedFrom']} are carried unchanged" if h.get('carriedFrom')
+            else 'this release has no hauling data')
+
+
 def utc_now() -> str:
     return dt.datetime.now(dt.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -90,7 +102,8 @@ def hauling_stage(p, log: Reporter, saved: Path | None, fetched_at: str | None =
     for name in (PROPOSED, CHANGELOG):
         p.w(name).unlink(missing_ok=True)
     doc: dict = {'status': 'failed', 'kind': None, 'reason': None, 'changed': False, 'dataVersion': version,
-                 'previous': tag, 'previousProblems': prev_problems, 'source': None, 'counts': {}, 'excluded': {},
+                 'previous': tag, 'previousProblems': prev_problems, 'carriedFrom': tag if old_t is not None else None,
+                 'source': None, 'counts': {}, 'excluded': {},
                  'dropped': 0, 'gaps': [], 'hints': [], 'diff': None}
     try:
         src = source.fetch(saved)
@@ -124,8 +137,9 @@ def hauling_stage(p, log: Reporter, saved: Path | None, fetched_at: str | None =
         doc['gaps'] = [asdict(g) for g in gaps]
         if gaps:
             write(p.w(PROPOSED), dict(aliases_doc, aliases=ps.propose(aliases_doc['aliases'], gaps)))
-            raise Stop('gap', f"{len(res.gaps)} pool names without a position, {len(emptied)} drops that empty a stellar "
-                              f"pool: {', '.join(g.name for g in gaps[:8])}" + ('...' if len(gaps) > 8 else ''))
+            raise Stop('gap', f"{count(len(res.gaps), 'pool name')} without a position, {count(len(emptied), 'drop')} "
+                              f"that empty a stellar pool: {', '.join(g.name for g in gaps[:8])}"
+                              + ('...' if len(gaps) > 8 else ''))
         pos, hints = ps.build(ps.Starmap(src.starmap), res.used, aliases_doc['aliases'])
         doc['hints'] = res.hints + hints
         per = Counter(x['system'] for x in pos)
@@ -177,7 +191,7 @@ def hauling_stage(p, log: Reporter, saved: Path | None, fetched_at: str | None =
     if doc['status'] != 'ok':
         log.num('hauling.failed', 1)
         log.say('hauling', 'run.py hauling', f"failed ({doc['kind']}): {doc['reason']}",
-                'none for the ship data (K2): verify carries the last hauling files; hauling-pr reports it'
+                f'none for the ship data (K2): {carried(doc)}; hauling-pr reports it'
                 + (' with the proposed aliases' if doc['kind'] == 'gap' else ' as an issue'))
     return 0
 
@@ -211,16 +225,19 @@ def write_notes(p, state: str, note: str) -> None:
 
 # ---------------------------------------------------------------- hauling-pr (E1)
 
+def gap_title(h: dict) -> str:
+    return f"Hauling aliases: {count(len(h['gaps']), 'place name')} without a position"
+
+
 def gap_body(h: dict, run_url: str) -> str:
     rows = []
     for g in h['gaps']:
         cands = '; '.join(f"{c['name']} ({c['system']}, {c['type']}, `{c['uuid']}`)" for c in g['candidates']) or '–'
         rows.append(f"| `{g['name']}` | {g['system'] or 'any'} | {g['why']} | {len(g['templates'])} | {cands} |")
     return '\n'.join([
-        f"## Hauling aliases: {len(h['gaps'])} place names without a position", '',
+        f'## {gap_title(h)}', '',
         f"The hauling job of run {run_url} stopped: these pool names match no starmap entry, or their `drop` empties the "
-        'pool of a stellar template (column Why). The ship data were released '
-        'without it (K2); the last hauling files are carried.', '',
+        f'pool of a stellar template (column Why). The ship data were released without it (K2); {carried(h)}.', '',
         f'This PR adds one entry per name to `{ALIASES}`: a unique candidate by `uuid`, otherwise a `drop` with the '
         'candidates named. **Merge = the table is extended**; the hauling data follow with the next run (dispatch or the '
         'first of the month). Edit an entry in the PR first if the proposal is wrong.', '',
@@ -242,15 +259,16 @@ def hauling_pr_stage(p, log: Reporter, run_url: str, dry_run: bool) -> int:
         body = p.out / 'hauling-pr-body.md'
         body.write_text(gap_body(h, run_url), encoding='utf-8', newline='\n')
         if dry_run:
-            log.say('hauling-pr --dry-run', 'work/hauling.json', f"{len(h['gaps'])} gaps; text in {body}", 'none')
+            log.say('hauling-pr --dry-run', 'work/hauling.json', f"{count(len(h['gaps']), 'gap')}; text in {body}", 'none')
             return 0
         branch = workflow.ALIAS_BRANCH
         github.git('switch', '-C', branch, cwd=p.root)
         shutil.copyfile(p.w(PROPOSED), p.root / ALIASES)
         github.git('add', ALIASES, cwd=p.root)
-        github.git(*workflow.BOT, 'commit', '-q', '-m', f"data: hauling aliases - {len(h['gaps'])} names", cwd=p.root)
+        github.git(*workflow.BOT, 'commit', '-q', '-m', f"data: hauling aliases - {count(len(h['gaps']), 'name')}",
+                   cwd=p.root)
         github.git('push', '--force', 'origin', branch, cwd=p.root)
-        title = f"Hauling aliases: {len(h['gaps'])} place names without a position"
+        title = gap_title(h)
         open_ = github.gh_json('pr', 'list', '--head', branch, '--state', 'open', '--json', 'number,headRefName') or []
         if open_:
             number = open_[0]['number']
@@ -259,7 +277,7 @@ def hauling_pr_stage(p, log: Reporter, run_url: str, dry_run: bool) -> int:
             number = int(github.gh('pr', 'create', '--base', 'main', '--head', branch, '--title', title,
                                    '--body-file', str(body)).strip().rsplit('/', 1)[-1])
         log.output('pr', number)
-        log.say('hauling-pr', f"{len(h['gaps'])} gaps of work/hauling.json", f"PR #{number} on {branch} "
+        log.say('hauling-pr', f"{count(len(h['gaps']), 'gap')} of work/hauling.json", f"PR #{number} on {branch} "
                 f"({'updated' if open_ else 'opened'})", f'Martin: read PR #{number}; merge = the alias table is extended')
         return 0
     if h:

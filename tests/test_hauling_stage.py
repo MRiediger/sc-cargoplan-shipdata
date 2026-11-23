@@ -305,6 +305,33 @@ def test_a_gap_opens_the_alias_pr_on_its_own_branch(gh: FakeGitHub, git: FakeGit
     assert pr['headRefName'] == 'data/hauling-aliases' and 'Checkmate at the L4 Lagrange of Pyro II' in pr['body']
 
 
+def test_the_gap_pr_says_what_the_release_carries_and_counts_in_singular(gh: FakeGitHub, git: FakeGit, tmp_path: Path) -> None:
+    """Dry run 45145705025: the body said 'the last hauling files are carried' for a release without any, and
+    '1 place names'. Carried or none comes from work/hauling.json (hauling-pr runs in a job of its own)."""
+    one = {'schemaVersion': 1, 'aliases': {'Lobby': {'drop': 'placeholder'}}}
+    p, log = setup(tmp_path / 'none', aliases=one)            # the last release has no hauling data
+    stage.hauling_stage(p, log, saved(tmp_path))
+    assert stage.hauling_pr_stage(p, log, 'https://run', dry_run=False) == 0
+    [pr] = gh.prs
+    assert pr['title'] == 'Hauling aliases: 1 place name without a position'
+    assert '## Hauling aliases: 1 place name without a position' in pr['body']
+    assert 'this release has no hauling data' in pr['body'] and 'carried' not in pr['body']
+    said = [x for x in workflow.said(p.out) if x['step'] == 'hauling'][-1]
+    assert '1 pool name without' in said['found'] and 'carries' not in said['todo']
+
+    good, glog = setup(tmp_path / 'good')
+    stage.hauling_stage(good, glog, saved(tmp_path))
+    p2, log2 = setup(tmp_path / 'carried', previous=with_hauling(tmp_path, good.w('hauling')),
+                     aliases={'schemaVersion': 1, 'aliases': {}})
+    stage.hauling_stage(p2, log2, saved(tmp_path))
+    assert stage.hauling_pr_stage(p2, log2, '-', dry_run=True) == 0
+    body = (p2.out / 'hauling-pr-body.md').read_text(encoding='utf-8')
+    assert '2 place names without a position' in body                   # Checkmate long form and Lobby
+    assert 'the hauling files of ships-2026.11.1 are carried unchanged' in body
+    said2 = [x for x in workflow.said(p2.out) if x['step'] == 'hauling'][-1]
+    assert 'the hauling files of ships-2026.11.1 are carried unchanged' in said2['todo']
+
+
 def test_any_other_failure_opens_an_issue_and_the_next_one_comments(gh: FakeGitHub, git: FakeGit, tmp_path: Path) -> None:
     p, log = setup(tmp_path)
     stage.hauling_stage(p, log, tmp_path / 'nothing-here')
