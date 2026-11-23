@@ -634,7 +634,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 - [x] `pytest` grün, wörtlich zitiert
 - [x] Dry-Run auf `feat/h1-hauling` (Martin klickt), Summary mit den fünf Hauling-Zeilen, `release --dry-run` listet beide Assets (Lauf 45004552167, Befund 12)
 - [x] Dry-Run mit provozierter Alias-Lücke: Hauling `failed`, Schiffskette grün, `out/hauling-pr-body.md` mit dem Namen (Lauf 45145705025, Befund 13)
-- [ ] Verify-Tests gegen die Vertragsfassung mit den Addenda abgeglichen: abgeglichen in App-T13.0a (`a9f4f02` auf `docs/p13-format-addendum`, der Vertrag folgt `check.py` auch bei Pool-Namen ohne System); wartet auf Martins Abnahme dort
+- [x] Verify-Tests gegen die Vertragsfassung mit den Addenda abgeglichen: App-T13.0a, abgenommen 22.11., in App-main gemergt (`b6652cc`); der Vertrag folgt `check.py` auch bei Pool-Namen ohne System
 - [ ] Abnahme Martin, Merge `--no-ff`, echter Lauf → Data-Release mit Abschnitt `hauling` (Übergabe an T13.3)
 
 **H1 Befund (21.11.2026):**
