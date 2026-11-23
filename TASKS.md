@@ -612,7 +612,7 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 
 **Zielbild:** App-Phase 13 „Cargo-Routen“ (`sc-cargoplan/TASKS.md`, D118, D119) braucht jedes Hauling-Template und die Positionen der Orte. Der Monatslauf liefert beide als flache Assets mit Manifest-Abschnitt `hauling`; Vertrag ist `sc-cargoplan/docs/hauling-data-format.md`. Review im Master-Chat „SC-CargoPlan | Cargo-Routen Umsetzung“. App-Gegenstück: T13.3 liest die Dateien.
 
-### [ ] H1 Hauling-Job (Plan freigegeben 21.11.2026 mit K1–K3, E1, `docs/plans/H1-hauling.md`, Branch `feat/h1-hauling`)
+### [x] H1 Hauling-Job (Plan freigegeben 21.11.2026 mit K1–K3, E1, `docs/plans/H1-hauling.md`, Branch `feat/h1-hauling`; abgenommen 23.11.2026)
 
 **Warum:** Ohne Templates kennt der Planer kein Board ohne Anflug, ohne Positionen keine Distanz; beides steht in den Spieldateien und soll monatlich mit den Schiffsdaten kommen, ohne sie je aufzuhalten (K2).
 - Schritt `hauling` in `chain`, Paket `tools/shipdata/hauling/` (source, templates, positions, check, diff, stage), `run.py hauling` und `hauling-pr`, Job `hauling-pr`
@@ -635,7 +635,8 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 - [x] Dry-Run auf `feat/h1-hauling` (Martin klickt), Summary mit den fünf Hauling-Zeilen, `release --dry-run` listet beide Assets (Lauf 45004552167, Befund 12)
 - [x] Dry-Run mit provozierter Alias-Lücke: Hauling `failed`, Schiffskette grün, `out/hauling-pr-body.md` mit dem Namen (Lauf 45145705025, Befund 13)
 - [x] Verify-Tests gegen die Vertragsfassung mit den Addenda abgeglichen: App-T13.0a, abgenommen 22.11., in App-main gemergt (`b6652cc`); der Vertrag folgt `check.py` auch bei Pool-Namen ohne System
-- [ ] Abnahme Martin, Merge `--no-ff`, echter Lauf → Data-Release mit Abschnitt `hauling` (Übergabe an T13.3)
+- [x] Abnahme (Claude.ai, 23.11.), Merge `--no-ff` nach `main`
+- [ ] Echter Lauf (Martin: Dispatch) → Daten-PR (judge orig-135c, Plan Schritt 8) → nach Martins Merge Data-Release `ships-2026.11.2` mit Abschnitt `hauling` (Übergabe an T13.3)
 
 **H1 Befund (21.11.2026):**
 1. **S-H0:** `scunpacked-data` `master` = `f182b7f` (13.11., „4.10.3-LIVE.13165946“), `contracts/` 5 166 Dateien, alle 1 843 Hauling-UUIDs des Dumps, Felder gleich (`mission_tokens` identisch; Regel der API: roh `MaxScu = 0` → `max_scu = MinScu`, `min_scu = null`). Tarball **195 522 208 B in 28,6 s**, Streamen und Filtern **3,9 s**; `run.py hauling` lokal (gespeicherter Tarball) **6,0 s**. Wiki-API: kein Zeitstempel je Mission, keine Rate-Limit-Header → Abschnitt 3.4 (`updated_at`) entfällt.
