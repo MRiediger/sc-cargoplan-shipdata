@@ -632,9 +632,9 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 - [x] Loader-Checks der App als pytest (`test_hauling_check.py`, jede Regel einmal rot) und im Lauf (`hauling-verify`: 0 Probleme)
 - [x] K2 provoziert: Quellfehler, Lücke, unbekanntes Wort, Absturz → `failed`, Exit 0, Vorgänger bzw. `null`; Schiffsrelease unberührt (Tests)
 - [x] `pytest` grün, wörtlich zitiert
-- [ ] Dry-Run auf `feat/h1-hauling` (Martin klickt), Summary mit den fünf Hauling-Zeilen, `release --dry-run` listet beide Assets
-- [ ] Dry-Run mit provozierter Alias-Lücke: Hauling `failed`, Schiffskette grün, `out/hauling-pr-body.md` mit dem Namen
-- [ ] Verify-Tests gegen die Vertragsfassung mit den Addenda abgeglichen (App-Doku-Commit steht aus)
+- [x] Dry-Run auf `feat/h1-hauling` (Martin klickt), Summary mit den fünf Hauling-Zeilen, `release --dry-run` listet beide Assets (Lauf 45004552167, Befund 12)
+- [x] Dry-Run mit provozierter Alias-Lücke: Hauling `failed`, Schiffskette grün, `out/hauling-pr-body.md` mit dem Namen (Lauf 45145705025, Befund 13)
+- [ ] Verify-Tests gegen die Vertragsfassung mit den Addenda abgeglichen: abgeglichen in App-T13.0a (`a9f4f02` auf `docs/p13-format-addendum`, der Vertrag folgt `check.py` auch bei Pool-Namen ohne System); wartet auf Martins Abnahme dort
 - [ ] Abnahme Martin, Merge `--no-ff`, echter Lauf → Data-Release mit Abschnitt `hauling` (Übergabe an T13.3)
 
 **H1 Befund (21.11.2026):**
@@ -649,8 +649,11 @@ Gemessen in WSL Ubuntu 24.04 mit den Pins (`wsl -u root`). Anfragen der Session:
 9. **Für T13.3 (App):** Alle **75** systemweiten Covalex-Stellar-Templates (`Stanton`) haben einen **leeren Drop-off-Pool**, 19 auch einen leeren Pickup-Pool; **kein** Stellar-Template nennt einen der vier Hubs.
 10. **Tests:** 171 → 267. Provoziert rot und zurück grün: Alias-PR überlebt Publish, Hauling-Dateien nicht in `files`/ZIP, Quellfehler = `failed`, Weitertragen, `continue-on-error`, K3, SD14 (`changed`), E1, geteilte `uuid`. **SD14 blieb beim ersten Versuch grün** – der Test prüfte `changed()` nicht; nachgeschärft.
 11. **Anfragen der Session:** 0 Motherlode; Wiki-API 2 (1 Liste im Spike, 1 Detail-Stichprobe); 2 Tarball-GET (Spike gestreamt, Entwicklungskopie); raw.githubusercontent: Starmap 4.10.3 (Analyse) und 4.10.2, einzelne Vertragsdateien im Spike; kein Lauf auf Actions.
+12. **Dry-Run 1** (45004552167, 22.11., auf `c47373a`): Quelle `3cc8072b24df` (neuer Commit, gleicher Build 4.10.3-LIVE.13165946), 2 Anfragen, 5 166 Vertragsdateien / 1 092 Kandidaten, Starmap 1 804 Einträge. Alle Zahlen gleich dem lokalen Lauf auf `f182b7f`: **587** Templates (Ausschlüsse je Grund identisch), **157** Positionen, 102 von Pools genannt, **2 354** Drops, 0 Hinweise, `hauling-verify` 0 Probleme, 570 973 + 42 563 B; Diff gegen `ships-2026.11.1` (ohne Hauling): 587 / 157 neu → Release. `release --dry-run`: **107 Assets, 32 800 291 B** inkl. beider Hauling-Dateien (die „found“-Zeile nannte sie nicht → A16, `513b91a`). Verify-Stopp „PR path: judge orig-135c“ = Schiffsseite (SD5 Fall 4), kein H1-Befund; der echte Lauf geht über den Daten-PR (Plan Schritt 8). **Drops je `missionType`** (nachgerechnet auf `f182b7f`): planetary 1 741, local 563, stellar **34**, interstellar 16 (Magnus Gateway). Die 34 liegen in drei Templates (Stanton4 Exp Direct Medium 9→1, Stanton1 Exp Direct Medium 51→28, Stanton3 Senior Medium 19→9), keine Station, kein leerer Pool – akzeptiert (Claude.ai 22.11.); neue Regel „stellar-Pool, den nur Drops leeren, = Lücke“ (SD14-Addendum, `513b91a`), auf den echten Daten 0 Treffer. Unter „Leg ohne SCU-Band 273“ (Planetary 254, Interstellar 19) und „Titelform 8“ (Rohtyp `Hauling`) kein stellar-Template.
+13. **Dry-Run 2** (45145705025, 23.11., auf `66e435f` = Checkmate-Langform aus der Alias-Tabelle entfernt): Hauling **`failed` (gap)**, genau 1 Lücke „Checkmate at the L4 Lagrange of Pyro II“ (pyro, **119** Templates), Vorschlag `07463f54…` → Checkmate im PR-Text; `chain` grün, Verify „hauling none: no hauling data“ (Vorgänger ohne Hauling), `release --dry-run` **105 Assets, 32 186 425 B**, „no hauling files (hauling: null)“; `hauling report` grün (24 s), im Dry-Run nur `out/hauling-pr-body.md`. Zwei Fehler im PR-Text: „the last hauling files are carried“ ohne Vorgänger-Dateien und „1 place names“ → `311fdb3` (`carriedFrom` in `work/hauling.json`, Singular/Plural). Lücke revertiert (`958fe3a`).
+14. **Tests:** 267 → 270 (stellar-Pool durch Drops geleert, „found“-Zeile, PR-Text getragen/keine Daten + Singular); jeder neue Test zuerst rot. Test-Fixture `u2` ist jetzt planetary (ihr Pool wird durch den Drop `Lobby` leer, was für stellar nun verboten ist).
 
-**pytest** komplett (WSL, Pins, `tools/local-wsl.sh test`, auf `b14367f`): `267 passed in 52.84s`.
+**pytest** komplett (WSL, Pins, `tools/local-wsl.sh test`, auf `958fe3a`, nach dem Revert): `270 passed in 57.91s`.
 
 ---
 
